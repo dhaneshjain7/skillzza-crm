@@ -2,7 +2,7 @@ const jwt        = require('jsonwebtoken');
 const crypto     = require('crypto');
 const RefreshToken = require('../models/RefreshToken');
 
-// ── Access Token (short-lived, sent in response body) ─────────────────────────
+// ── Access Token (short-lived, sent in response body)
 const generateAccessToken = (user) => {
   return jwt.sign(
     {
@@ -15,7 +15,7 @@ const generateAccessToken = (user) => {
   );
 };
 
-// ── Refresh Token (long-lived, stored in DB + httpOnly cookie) ────────────────
+// ── Refresh Token (long-lived, stored in DB + httpOnly cookie)
 const generateRefreshToken = async (user, ipAddress, userAgent) => {
   // Opaque random token — not a JWT
   const token = crypto.randomBytes(64).toString('hex');
@@ -41,7 +41,7 @@ const generateRefreshToken = async (user, ipAddress, userAgent) => {
   return token;
 };
 
-// ── Send both tokens ──────────────────────────────────────────────────────────
+// ── Send both tokens
 // Access token → response JSON
 // Refresh token → httpOnly cookie (not accessible by JS)
 const sendTokens = async (user, statusCode, res, req) => {

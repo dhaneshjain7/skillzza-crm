@@ -1,4 +1,5 @@
 const { User, School, ActivityLog } = require('../models');
+const { notifyPasswordChanged } = require('../utils/notificationService');
 
 const logActivity = async ({ user, action, description, req }) => {
   try {
@@ -180,6 +181,9 @@ const resetAdminPassword = async (req, res) => {
     await admin.save();
 
     await logActivity({ user: req.user, action: 'Password Changed', description: `Reset password for admin: ${admin.name}`, req });
+
+    // Notify the admin their password was reset
+    await notifyPasswordChanged({ user: admin, io: req.app.get('io') });
 
     res.status(200).json({ success: true, message: 'Password reset successfully.' });
   } catch (err) {

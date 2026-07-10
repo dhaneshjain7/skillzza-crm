@@ -89,7 +89,7 @@ const sendMessage = async (req, res) => {
     // Also emit to receiver's personal room
     emit(req, `user_${receiverId}`, 'new_message', populated);
 
-    // Create + emit notification in real time
+    // Create + emit notification in real time (+ email)
     await createNotification({
       recipientId:    receiverId,
       recipientRole:  receiverRole,
@@ -98,8 +98,13 @@ const sendMessage = async (req, res) => {
       message:        attachment ? `📎 Sent a file: ${attachment.fileName}` : (content?.substring(0, 100) || 'New message'),
       relatedSchool:  schoolId,
       relatedMessage: message._id,
-      sendEmailFlag:  false,
-      io:             req.app.get('io'),
+      sendEmailFlag:  true,
+      emailData: {
+        senderName: sender.name,
+        schoolName: school.schoolName,
+        content:    attachment ? `📎 Sent a file: ${attachment.fileName}` : (content || ''),
+      },
+      io: req.app.get('io'),
     });
 
     res.status(201).json({ success: true, message: populated });

@@ -7,13 +7,15 @@ const {
   logout,
   getMe,
   changePassword,
+  googleAuthSchool,
 } = require('../controllers/authController');
 
 const { protect } = require('../middleware/authMiddleware');
 
 // ── Public routes ─────────────────────────────────────────────────────────────
-router.post('/login',   login);         // POST /api/auth/login
-router.post('/refresh', refreshToken);  // POST /api/auth/refresh
+router.post('/login',          login);            // POST /api/auth/login
+router.post('/refresh',        refreshToken);      // POST /api/auth/refresh
+router.post('/google/school',  googleAuthSchool);  // POST /api/auth/google/school
 
 // ── Protected routes ──────────────────────────────────────────────────────────
 router.post('/logout',          protect, logout);          // POST /api/auth/logout

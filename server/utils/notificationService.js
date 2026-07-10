@@ -1,7 +1,7 @@
 const { Notification, User } = require('../models');
 const { sendEmail }          = require('./emailService');
 
-// ── createNotification ────────────────────────────────────────────────────────
+//createNotification
 // Central function — call this from any controller to fire a notification
 const createNotification = async ({
   recipientId,
@@ -70,7 +70,7 @@ const createNotification = async ({
   }
 };
 
-// ── Trigger helpers — call these from controllers ─────────────────────────────
+// ── Trigger helpers — call these from controllers
 
 const notifyStatusUpdate = async ({ school, oldStatus, newStatus, remarks, updatedBy, io }) => {
   // Notify school user
@@ -130,6 +130,7 @@ const notifyAdminAssigned = async ({ school, admin, assignedBy, io }) => {
       title:      `New School Assignment`,
       message:    `You have been assigned to manage ${school.schoolName}`,
       schoolName: school.schoolName,
+      assignedBy: assignedBy.name,
     },
     io,
   });

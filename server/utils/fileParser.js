@@ -1,7 +1,7 @@
 const fs   = require('fs');
 const path = require('path');
 
-// ── Column definitions from PDF ───────────────────────────────────────────────
+// ── Column definitions from PDF
 
 const SCHEMAS = {
   school_approval: {
@@ -156,7 +156,7 @@ const SCHEMAS = {
   },
 };
 
-// ── Parse file ────────────────────────────────────────────────────────────────
+// ── Parse file
 const parseFile = async (filePath) => {
   const ext = path.extname(filePath).toLowerCase();
 
@@ -225,7 +225,7 @@ const parseXLS = (filePath) => {
   return { headers, rows };
 };
 
-// ── Validate ──────────────────────────────────────────────────────────────────
+// ── Validate 
 const validateFile = (parsed, documentType) => {
   const schema = SCHEMAS[documentType];
   if (!schema) throw new Error(`Unknown document type: ${documentType}`);

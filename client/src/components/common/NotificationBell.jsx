@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSocket } from '../../context/SocketContext';
+import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import API from '../../api/axios';
 
@@ -16,21 +17,42 @@ const TRIGGER_ICONS = {
 };
 
 const NotificationBell = () => {
-  const { socket }                    = useSocket();
-  const navigate                      = useNavigate();
+  const { socket }                        = useSocket();
+  const navigate                          = useNavigate();
+  const { user }                          = useAuth();
   const [notifications, setNotifications] = useState([]);
-  const [unread,        setUnread]    = useState(0);
-  const [open,          setOpen]      = useState(false);
-  const [loading,       setLoading]   = useState(false);
-  const dropdownRef                   = useRef(null);
+  const [unread,        setUnread]        = useState(0);
+  const [open,          setOpen]          = useState(false);
+  const [loading,       setLoading]       = useState(false);
+  const dropdownRef                       = useRef(null);
 
-  // Fetch on mount
-  useEffect(() => {
-    fetchNotifications();
-    fetchUnreadCount();
+  // ── Fetch unread count ────────────────────────────────────────────────────
+  const fetchUnreadCount = useCallback(async () => {
+    try {
+      const res = await API.get('/notifications/unread-count');
+      setUnread(res.data.count || 0);
+    } catch (e) { /* silent */ }
   }, []);
 
-  // Close on outside click
+  // ── Fetch full list ───────────────────────────────────────────────────────
+  const fetchNotifications = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await API.get('/notifications?limit=15');
+      setNotifications(res.data.notifications || []);
+      setUnread(res.data.unreadCount || 0);
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
+  }, []);
+
+  // Fetch on mount + poll every 30s as fallback
+  useEffect(() => {
+    fetchUnreadCount();
+    const interval = setInterval(fetchUnreadCount, 30000);
+    return () => clearInterval(interval);
+  }, [fetchUnreadCount]);
+
+  // Close dropdown on outside click
   useEffect(() => {
     const handler = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
@@ -41,11 +63,12 @@ const NotificationBell = () => {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // Real-time socket listener
+  // ── Real-time socket ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!socket) return;
 
     const onNew = (notification) => {
+      console.log('🔔 New notification received:', notification);
       setNotifications(prev => [notification, ...prev].slice(0, 20));
       setUnread(u => u + 1);
     };
@@ -54,26 +77,10 @@ const NotificationBell = () => {
     return () => socket.off('new_notification', onNew);
   }, [socket]);
 
-  const fetchNotifications = async () => {
-    setLoading(true);
-    try {
-      const res = await API.get('/notifications?limit=15');
-      setNotifications(res.data.notifications || []);
-      setUnread(res.data.unreadCount || 0);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
-  };
-
-  const fetchUnreadCount = async () => {
-    try {
-      const res = await API.get('/notifications/unread-count');
-      setUnread(res.data.count || 0);
-    } catch (e) { console.error(e); }
-  };
-
   const handleOpen = () => {
-    setOpen(p => !p);
-    if (!open) fetchNotifications();
+    const next = !open;
+    setOpen(next);
+    if (next) fetchNotifications();
   };
 
   const handleMarkRead = async (id) => {
@@ -100,17 +107,58 @@ const NotificationBell = () => {
     } catch (e) { console.error(e); }
   };
 
-  const handleClick = async (notification) => {
-    if (!notification.isRead) await handleMarkRead(notification._id);
-    setOpen(false);
-    // Navigate to related content
-    if (notification.relatedSchool?._id) {
-      // Navigate based on trigger type
-      if (notification.triggerType === 'New Message') {
-        navigate('/school/messages');
-      } else if (notification.triggerType === 'Document Uploaded') {
-        navigate(`/admin/schools/${notification.relatedSchool._id}/documents`);
+  const handleClick = (notification) => {
+    // Get role from token — most reliable
+    let role = '';
+    try {
+      const token = localStorage.getItem('accessToken');
+      if (token) {
+        role = JSON.parse(atob(token.split('.')[1])).role;
       }
+    } catch (e) {
+      role = user?.role || '';
+    }
+
+    const type = notification.triggerType;
+
+    // Mark read in background
+    if (!notification.isRead) {
+      API.put(`/notifications/${notification._id}/read`).then(() => {
+        setNotifications(prev => prev.map(n => n._id === notification._id ? { ...n, isRead: true } : n));
+        setUnread(u => Math.max(0, u - 1));
+      }).catch(() => {});
+    }
+
+    // Close dropdown
+    setOpen(false);
+
+    // Navigate based on type and role
+    if (type === 'New Message') {
+      if (role === 'school_user') {
+        navigate('/school/messages');
+      } else if (notification.relatedSchool?._id) {
+        navigate(`/admin/messages?schoolId=${notification.relatedSchool._id}`);
+      } else {
+        navigate('/admin/messages');
+      }
+    } else if (type === 'Document Uploaded' || type === 'Document Approved' || type === 'Document Rejected') {
+      if (role === 'school_user') {
+        navigate('/school/documents');
+      } else if (notification.relatedSchool?._id) {
+        navigate(`/admin/schools/${notification.relatedSchool._id}/documents`);
+      } else {
+        navigate('/admin/schools');
+      }
+    } else if (type === 'Status Updated') {
+      if (role === 'school_user') {
+        navigate('/school/dashboard');
+      } else {
+        navigate('/admin/dashboard');
+      }
+    } else if (type === 'Admin Assigned') {
+      navigate('/admin/dashboard');
+    } else {
+      navigate('/notifications');
     }
   };
 
@@ -127,10 +175,13 @@ const NotificationBell = () => {
   return (
     <div ref={dropdownRef} style={{ position: 'relative' }}>
       {/* Bell button */}
-      <button onClick={handleOpen} style={{ position: 'relative', background: open ? '#f1f5f9' : 'none', border: 'none', cursor: 'pointer', padding: '6px 8px', borderRadius: '8px', fontSize: '1.2rem', lineHeight: 1, transition: 'background 0.15s' }}>
+      <button
+        onClick={handleOpen}
+        style={{ position: 'relative', background: open ? '#f1f5f9' : 'none', border: 'none', cursor: 'pointer', padding: '6px 8px', borderRadius: '8px', fontSize: '1.2rem', lineHeight: 1, transition: 'background 0.15s' }}
+      >
         🔔
         {unread > 0 && (
-          <span style={{ position: 'absolute', top: '2px', right: '2px', background: '#ef4444', color: '#fff', borderRadius: '10px', padding: '1px 5px', fontSize: '0.6rem', fontWeight: '800', minWidth: '16px', textAlign: 'center', lineHeight: '14px', border: '2px solid #fff' }}>
+          <span style={{ position: 'absolute', top: '0px', right: '0px', background: '#ef4444', color: '#fff', borderRadius: '10px', padding: '1px 5px', fontSize: '0.6rem', fontWeight: '800', minWidth: '16px', textAlign: 'center', lineHeight: '14px', border: '2px solid #fff' }}>
             {unread > 99 ? '99+' : unread}
           </span>
         )}
@@ -166,32 +217,24 @@ const NotificationBell = () => {
               </div>
             ) : (
               notifications.map(n => (
-                <div key={n._id}
-                  onClick={() => handleClick(n)}
+                <div key={n._id} onClick={() => handleClick(n)}
                   style={{ display: 'flex', gap: '0.625rem', padding: '0.875rem 1rem', borderBottom: '1px solid #f8fafc', cursor: 'pointer', background: n.isRead ? '#fff' : '#f0f6ff', transition: 'background 0.1s' }}
                   onMouseEnter={e => e.currentTarget.style.background = n.isRead ? '#f8fafc' : '#e8f0f9'}
                   onMouseLeave={e => e.currentTarget.style.background = n.isRead ? '#fff' : '#f0f6ff'}
                 >
-                  {/* Icon */}
                   <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: n.isRead ? '#f1f5f9' : '#e8f0f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', flexShrink: 0 }}>
                     {TRIGGER_ICONS[n.triggerType] || '🔔'}
                   </div>
-
-                  {/* Content */}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '0.8rem', fontWeight: n.isRead ? '500' : '700', color: '#1e293b', marginBottom: '2px', lineHeight: 1.3 }}>{n.title}</div>
+                    <div style={{ fontSize: '0.8rem', fontWeight: n.isRead ? '500' : '700', color: '#1e293b', marginBottom: '2px' }}>{n.title}</div>
                     <div style={{ fontSize: '0.73rem', color: '#64748b', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{n.message}</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '4px' }}>
                       <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>{timeAgo(n.createdAt)}</span>
                       {!n.isRead && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#1e3a5f', flexShrink: 0 }} />}
                     </div>
                   </div>
-
-                  {/* Delete */}
                   <button onClick={(e) => handleDelete(n._id, e)}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1', fontSize: '0.8rem', padding: '2px', flexShrink: 0, alignSelf: 'flex-start' }}
-                    onMouseEnter={e => e.currentTarget.style.color = '#94a3b8'}
-                    onMouseLeave={e => e.currentTarget.style.color = '#cbd5e1'}
                     title="Remove">✕</button>
                 </div>
               ))

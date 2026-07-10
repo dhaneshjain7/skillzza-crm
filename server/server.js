@@ -11,7 +11,7 @@ require('dotenv').config();
 const app        = express();
 const httpServer = createServer(app);
 
-// ── Socket.io ─────────────────────────────────────────────────────────────────
+// ── Socket.io
 const io = new Server(httpServer, {
   cors: { origin: process.env.CLIENT_URL, credentials: true },
 });
@@ -50,7 +50,7 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => console.log(`Socket disconnected: ${socket.id}`));
 });
 
-// ── Middleware ────────────────────────────────────────────────────────────────
+// ── Middleware
 app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -59,13 +59,13 @@ app.use(morgan('dev'));
 app.use('/uploads', express.static('uploads'));
 app.set('io', io);
 
-// ── Database ──────────────────────────────────────────────────────────────────
+// ── Database 
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => console.log('✓  MongoDB connected'))
   .catch((err) => console.error('MongoDB error:', err));
 
-// ── Routes ────────────────────────────────────────────────────────────────────
+// ── Routes
 app.use('/api/auth',          require('./routes/authRoutes'));
 app.use('/api/schools',       require('./routes/schoolRoutes'));
 app.use('/api/documents',     require('./routes/documentRoutes'));

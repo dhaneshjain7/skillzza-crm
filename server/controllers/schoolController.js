@@ -1,5 +1,5 @@
 const { School, SchoolStatusHistory, AuditLog, ActivityLog, User } = require('../models');
-const { notifyStatusUpdate, notifyAdminAssigned } = require('../utils/notificationService');
+const { notifyStatusUpdate, notifyAdminAssigned, notifyPasswordChanged } = require('../utils/notificationService');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -382,6 +382,16 @@ const updateSchoolStatus = async (req, res) => {
       req,
     });
 
+    // Real-time + email notification to the school user
+    await notifyStatusUpdate({
+      school,
+      oldStatus,
+      newStatus,
+      remarks,
+      updatedBy: req.user,
+      io: req.app.get('io'),
+    });
+
     // Notify via Socket.io
     req.app.get('io')?.to(`school_${school._id}`).emit('status_updated', {
       schoolId:  school._id,
@@ -449,6 +459,14 @@ const assignAdmin = async (req, res) => {
       relatedSchool: school._id,
       relatedUser:   adminId,
       req,
+    });
+
+    // Real-time + email notification to the newly assigned admin
+    await notifyAdminAssigned({
+      school,
+      admin,
+      assignedBy: req.user,
+      io: req.app.get('io'),
     });
 
     const updated = await School.findById(school._id)
@@ -684,6 +702,9 @@ const resetSchoolPassword = async (req, res) => {
       relatedSchool: school._id,
       req,
     });
+
+    // Notify the school user their portal password was reset
+    await notifyPasswordChanged({ user: schoolUser, io: req.app.get('io') });
 
     res.status(200).json({ success: true, message: 'School login password reset successfully.' });
   } catch (err) {

@@ -1,12 +1,15 @@
 // Generic login page — receives role config as props
 // Used by SuperAdminLogin, AdminLogin, SchoolLogin
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import GoogleSignInButton from '../components/auth/GoogleSignInButton';
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 const LoginPage = ({ roleConfig }) => {
-  const { login } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
   const navigate  = useNavigate();
   const location  = useLocation();
 
@@ -14,8 +17,18 @@ const LoginPage = ({ roleConfig }) => {
   const [error, setError]       = useState('');
   const [loading, setLoading]   = useState(false);
   const [showPass, setShowPass] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   const from = location.state?.from?.pathname || roleConfig.dashboardPath;
+
+  const goToDashboard = (role) => {
+    const paths = {
+      superadmin:  '/superadmin/dashboard',
+      admin:       '/admin/dashboard',
+      school_user: '/school/dashboard',
+    };
+    navigate(paths[role] || '/', { replace: true });
+  };
 
   const handleChange = (e) => {
     setError('');
@@ -38,13 +51,25 @@ const LoginPage = ({ roleConfig }) => {
       return;
     }
 
-    const paths = {
-      superadmin:  '/superadmin/dashboard',
-      admin:       '/admin/dashboard',
-      school_user: '/school/dashboard',
-    };
-    navigate(paths[result.user.role] || '/', { replace: true });
+    goToDashboard(result.user.role);
   };
+
+  // ── Google Sign-In (School only) ──────────────────────────────────────────
+  const handleGoogleSuccess = useCallback(async (credential) => {
+    setError('');
+    setGoogleLoading(true);
+    const result = await loginWithGoogle(credential);
+    setGoogleLoading(false);
+
+    if (!result.success) { setError(result.message); return; }
+    goToDashboard(result.user.role);
+  }, [loginWithGoogle]);
+
+  const handleGoogleError = useCallback((msg) => {
+    setError(msg || 'Google sign-in failed. Please try again.');
+  }, []);
+
+  const showGoogle = roleConfig.role === 'school_user' && GOOGLE_CLIENT_ID;
 
   return (
     <div style={{ ...s.page, background: roleConfig.pageBg }}>
@@ -72,6 +97,24 @@ const LoginPage = ({ roleConfig }) => {
 
         {error && (
           <div style={s.errorBox}>⚠ {error}</div>
+        )}
+
+        {/* Google Sign-In — school only */}
+        {showGoogle && (
+          <>
+            <div style={{ marginBottom: '1rem', opacity: googleLoading ? 0.6 : 1, pointerEvents: googleLoading ? 'none' : 'auto' }}>
+              <GoogleSignInButton
+                clientId={GOOGLE_CLIENT_ID}
+                onSuccess={handleGoogleSuccess}
+                onError={handleGoogleError}
+              />
+            </div>
+            <div style={s.divider}>
+              <div style={s.dividerLine} />
+              <span style={s.dividerText}>or sign in with email</span>
+              <div style={s.dividerLine} />
+            </div>
+          </>
         )}
 
         <form onSubmit={handleSubmit} style={s.form}>
@@ -107,6 +150,12 @@ const LoginPage = ({ roleConfig }) => {
           </button>
         </form>
 
+        {showGoogle && (
+          <p style={s.googleNote}>
+            New here? Just tap "Continue with Google" above — we'll set up your school automatically.
+          </p>
+        )}
+
         {/* Hint credentials for dev */}
         {roleConfig.hint && (
           <div style={s.hint}>
@@ -140,6 +189,10 @@ const s = {
   submitBtn: { color: '#fff', border: 'none', borderRadius: '8px', padding: '0.75rem', fontSize: '1rem', fontWeight: '600', cursor: 'pointer', marginTop: '0.25rem', width: '100%', transition: 'opacity 0.2s' },
   hint:      { marginTop: '1rem', background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '8px', padding: '0.625rem 0.875rem', fontSize: '0.78rem', color: '#475569' },
   footer:    { marginTop: '1.5rem', textAlign: 'center', fontSize: '0.72rem', color: '#94a3b8' },
+  divider:   { display: 'flex', alignItems: 'center', gap: '0.75rem', margin: '1.25rem 0' },
+  dividerLine: { flex: 1, height: '1px', background: '#e2e8f0' },
+  dividerText: { fontSize: '0.72rem', color: '#94a3b8', whiteSpace: 'nowrap' },
+  googleNote: { fontSize: '0.72rem', color: '#94a3b8', textAlign: 'center', marginTop: '0.875rem' },
 };
 
 export default LoginPage;

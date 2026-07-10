@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Layout from '../../components/layout/Layout';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
@@ -26,13 +27,28 @@ const AdminMessages = () => {
   const typingRef  = useRef(null);
   const inputRef   = useRef(null);
   const fileRef    = useRef(null);
+  const [searchParams] = useSearchParams();
 
   useEffect(() => {
     const fetchConvos = async () => {
       try {
         const res = await API.get('/messages/conversations');
         setConversations(res.data.conversations || []);
-        if (res.data.conversations?.length > 0) {
+
+        const requestedSchoolId = searchParams.get('schoolId');
+
+        if (requestedSchoolId) {
+          const match = res.data.conversations?.find(c => c.school._id === requestedSchoolId);
+          if (match) {
+            openConversation(match.school);
+          } else {
+            // Not in the loaded conversation list (e.g. brand-new school) — fetch it directly
+            try {
+              const schoolRes = await API.get(`/schools/${requestedSchoolId}`);
+              if (schoolRes.data.school) openConversation(schoolRes.data.school);
+            } catch (e) { console.error(e); }
+          }
+        } else if (res.data.conversations?.length > 0) {
           openConversation(res.data.conversations[0].school);
         }
       } catch (e) { console.error(e); }

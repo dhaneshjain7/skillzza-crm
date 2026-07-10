@@ -1,19 +1,19 @@
 const nodemailer = require('nodemailer');
 
-// ── Transporter ───────────────────────────────────────────────────────────────
+// ── Transporter 
 const createTransporter = () => {
   return nodemailer.createTransport({
-    host:   process.env.EMAIL_HOST || 'smtp.gmail.com',
-    port:   Number(process.env.EMAIL_PORT) || 587,
-    secure: false,
+    host:   process.env.SMTP_HOST || 'smtp.gmail.com',
+    port:   Number(process.env.SMTP_PORT) || 587,
+    secure: process.env.SMTP_SECURE === 'true',
     auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
     },
   });
 };
 
-// ── Email templates ───────────────────────────────────────────────────────────
+// ── Email templates 
 const TEMPLATES = {
   'Status Updated': (data) => ({
     subject: `School Status Updated — ${data.schoolName}`,
@@ -88,6 +88,48 @@ const TEMPLATES = {
       </div>`,
   }),
 
+  'Admin Assigned': (data) => ({
+    subject: `New School Assignment — ${data.schoolName}`,
+    html: `
+      <div style="font-family:'Segoe UI',sans-serif;max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.08);">
+        <div style="background:#1e3a5f;padding:24px 32px;">
+          <h1 style="color:#fff;margin:0;font-size:1.3rem;font-weight:800;letter-spacing:1px;">SKILLZZA CRM</h1>
+        </div>
+        <div style="padding:32px;">
+          <h2 style="color:#1e293b;font-size:1.1rem;margin:0 0 1rem;">👤 New School Assignment</h2>
+          <p style="color:#475569;font-size:0.9rem;line-height:1.6;">You have been assigned as the administrator for a new school:</p>
+          <div style="background:#f8fafc;border-radius:8px;padding:16px;margin:1rem 0;">
+            <div style="font-size:1rem;font-weight:700;color:#1e3a5f;">${data.schoolName}</div>
+          </div>
+          <p style="color:#94a3b8;font-size:0.78rem;margin-top:2rem;">Assigned by ${data.assignedBy || 'Super Admin'} on ${new Date().toLocaleString('en-IN')}</p>
+        </div>
+        <div style="background:#f8fafc;padding:16px 32px;text-align:center;border-top:1px solid #f1f5f9;">
+          <p style="color:#94a3b8;font-size:0.75rem;margin:0;">Skillzza CRM · Confidential · Do not forward</p>
+        </div>
+      </div>`,
+  }),
+
+  'Password Changed': (data) => ({
+    subject: `Your Skillzza CRM Password Was Changed`,
+    html: `
+      <div style="font-family:'Segoe UI',sans-serif;max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.08);">
+        <div style="background:#1e3a5f;padding:24px 32px;">
+          <h1 style="color:#fff;margin:0;font-size:1.3rem;font-weight:800;letter-spacing:1px;">SKILLZZA CRM</h1>
+        </div>
+        <div style="padding:32px;">
+          <h2 style="color:#1e293b;font-size:1.1rem;margin:0 0 1rem;">🔑 Password Changed</h2>
+          <p style="color:#475569;font-size:0.9rem;line-height:1.6;">Your Skillzza CRM account password was just changed successfully.</p>
+          <div style="background:#fef2f2;border-left:4px solid #ef4444;border-radius:0 8px 8px 0;padding:16px;margin:1rem 0;">
+            <p style="color:#991b1b;font-size:0.85rem;margin:0;">If you did not make this change, please contact your administrator immediately.</p>
+          </div>
+          <p style="color:#94a3b8;font-size:0.78rem;margin-top:2rem;">${new Date().toLocaleString('en-IN')}</p>
+        </div>
+        <div style="background:#f8fafc;padding:16px 32px;text-align:center;border-top:1px solid #f1f5f9;">
+          <p style="color:#94a3b8;font-size:0.75rem;margin:0;">Skillzza CRM · Confidential · Do not forward</p>
+        </div>
+      </div>`,
+  }),
+
   'default': (data) => ({
     subject: `Notification — ${data.title || 'Skillzza CRM'}`,
     html: `
@@ -100,9 +142,9 @@ const TEMPLATES = {
   }),
 };
 
-// ── Send email ────────────────────────────────────────────────────────────────
+// ── Send email 
 const sendEmail = async ({ to, triggerType, data }) => {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
     console.log(`[Email skipped — no credentials] To: ${to}, Type: ${triggerType}`);
     return { skipped: true };
   }
@@ -113,7 +155,7 @@ const sendEmail = async ({ to, triggerType, data }) => {
     const transporter = createTransporter();
 
     await transporter.sendMail({
-      from:    `"${process.env.EMAIL_FROM_NAME || 'Skillzza CRM'}" <${process.env.EMAIL_USER}>`,
+      from:    `"${process.env.EMAIL_FROM_NAME || 'Skillzza CRM'}" <${process.env.SMTP_USER}>`,
       to,
       subject,
       html,
