@@ -136,6 +136,28 @@ const notifyAdminAssigned = async ({ school, admin, assignedBy, io }) => {
   });
 };
 
+// Admin/superadmin uploaded a file FOR a school (e.g. Adobe account credentials)
+const notifyDocumentSent = async ({ school, document, sentBy, io }) => {
+  if (school.schoolUser) {
+    await createNotification({
+      recipientId:    school.schoolUser,
+      recipientRole:  'school_user',
+      triggerType:    'Document Uploaded',
+      title:          'A new file has been shared with your school',
+      message:        `${sentBy.name} shared "${document.fileName}" with ${school.schoolName}. You can view and download it from the Documents page.`,
+      relatedSchool:  school._id,
+      relatedDocument: document._id,
+      sendEmailFlag:  true,
+      emailData: {
+        schoolName:   school.schoolName,
+        fileName:     document.fileName,
+        documentType: document.documentType,
+      },
+      io,
+    });
+  }
+};
+
 const notifyPasswordChanged = async ({ user, io }) => {
   await createNotification({
     recipientId:   user._id,
@@ -156,6 +178,7 @@ module.exports = {
   createNotification,
   notifyStatusUpdate,
   notifyDocumentUploaded,
+  notifyDocumentSent,
   notifyAdminAssigned,
   notifyPasswordChanged,
 };

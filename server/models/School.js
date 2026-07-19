@@ -19,6 +19,7 @@ const schoolSchema = new mongoose.Schema(
     // ── Basic Details ──────────────────────────────────────────────────────────
     schoolName:        { type: String, required: true, trim: true },
     registrationNumber:{ type: String, trim: true },
+    udiseCode:         { type: String, trim: true },   // 11-digit UDISE code — searchable
     schoolType:        { type: String, enum: ['Primary', 'Secondary', 'Higher Secondary', 'College', 'Other'] },
     board:             { type: String, trim: true },   // CBSE, ICSE, State, etc.
     establishedYear:   { type: Number },
@@ -86,6 +87,7 @@ const schoolSchema = new mongoose.Schema(
 // Indexes for search module
 schoolSchema.index({ schoolName: 'text', email: 'text', registrationNumber: 'text' });
 schoolSchema.index({ currentStatus: 1 });
+schoolSchema.index({ udiseCode: 1 });
 schoolSchema.index({ assignedAdmin: 1 });
 schoolSchema.index({ 'address.city': 1, 'address.state': 1, 'address.district': 1 });
 

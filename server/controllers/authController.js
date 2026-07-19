@@ -222,6 +222,83 @@ const changePassword = async (req, res) => {
   }
 };
 
+// ── @POST /api/auth/register/school ──────────────────────────────────────────
+// Email/password self-registration for School Users.
+// Creates a new School (status "New") + linked school_user account, then logs
+// them in straight away — same flow as first-time Google Sign-In.
+const registerSchool = async (req, res) => {
+  try {
+    const { name, schoolName, email, phone, password, confirmPassword } = req.body;
+
+    if (!name || !schoolName || !email || !phone || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Name, school name, email, phone and password are required.',
+      });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters.',
+      });
+    }
+
+    if (confirmPassword !== undefined && password !== confirmPassword) {
+      return res.status(400).json({ success: false, message: 'Passwords do not match.' });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const existing = await User.findOne({ email: normalizedEmail });
+    if (existing) {
+      return res.status(409).json({
+        success: false,
+        message: 'An account with this email already exists. Please sign in instead.',
+      });
+    }
+
+    const newUser = await User.create({
+      name:     name.trim(),
+      email:    normalizedEmail,
+      password,
+      role:     'school_user',
+      phone:    phone.trim(),
+      isActive: true,
+    });
+
+    const school = await School.create({
+      schoolName:    schoolName.trim(),
+      email:         normalizedEmail,
+      phone:         phone.trim(),
+      address:       { city: 'Not set', state: 'Not set' },
+      currentStatus: 'New',
+      schoolUser:    newUser._id,
+    });
+
+    await SchoolStatusHistory.create({
+      school:        school._id,
+      oldStatus:     null,
+      newStatus:     'New',
+      updatedBy:     newUser._id,
+      updatedByRole: 'school_user',
+      remarks:       'Self-registered with email and password',
+    });
+
+    await logActivity({
+      user: newUser,
+      action: 'School Created',
+      description: `${newUser.name} self-registered ${school.schoolName}`,
+      req,
+    });
+
+    await sendTokens(newUser, 201, res, req);
+  } catch (err) {
+    console.error('registerSchool error:', err);
+    res.status(500).json({ success: false, message: 'Server error during registration.' });
+  }
+};
+
 // ── @POST /api/auth/google/school ────────────────────────────────────────────
 // Google Sign-In for School Users.
 // - If a school_user account with this Google email already exists → log them in.
@@ -320,4 +397,4 @@ const googleAuthSchool = async (req, res) => {
   }
 };
 
-module.exports = { login, refreshToken, logout, getMe, changePassword, googleAuthSchool };
+module.exports = { login, refreshToken, logout, getMe, changePassword, registerSchool, googleAuthSchool };

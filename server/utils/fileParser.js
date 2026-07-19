@@ -1,7 +1,7 @@
 const fs   = require('fs');
 const path = require('path');
 
-// ── Column definitions from PDF
+// ── Column definitions from PDF ───────────────────────────────────────────────
 
 const SCHEMAS = {
   school_approval: {
@@ -19,7 +19,6 @@ const SCHEMAS = {
       'SPOC Mobile',
       'SPOC Email',
     ],
-    // Normalised aliases (handles slight spacing / case variations)
     aliases: {
       'sl no':                        'SL NO',
       'slno':                         'SL NO',
@@ -54,12 +53,13 @@ const SCHEMAS = {
 
   student_data: {
     label: 'Student Data',
+    // NOTE: "Skillzza UID" removed from required fields per user request —
+    // it's still accepted/normalised if present, just no longer mandatory.
     required: [
       'First Name',
       'Last Name',
       'Grade',
       'Section',
-      'Skillzza UID',
       'School Name',
       'School City,State',
       'UDISE Code',
@@ -84,10 +84,7 @@ const SCHEMAS = {
     },
     validators: {
       'UDISE Code': (v) => /^\d{11}$/.test(String(v).trim()) || 'UDISE Code must be 11 digits',
-      'Grade':      (v) => {
-        const g = Number(v);
-        return (Number.isInteger(g) && g >= 6 && g <= 12) || 'Grade must be between 6 and 12';
-      },
+      // Grade range check removed per user request — any value is now accepted
     },
   },
 
@@ -118,18 +115,21 @@ const SCHEMAS = {
 
   adobe_student_accounts: {
     label: 'Adobe Student Accounts',
-    required: ['Name', 'ID', 'Password', 'School Name', 'Class', 'UDISE Code', 'School City', 'State'],
+    required: ['Name', 'ID', 'PW', 'School Name', 'Class Section', 'UDISE Code', 'School City', 'State'],
     aliases: {
-      'name':        'Name',
-      'id':          'ID',
-      'password':    'Password',
-      'school name': 'School Name',
-      'class':       'Class',
-      'udise code':  'UDISE Code',
-      'udise':       'UDISE Code',
-      'school city': 'School City',
-      'city':        'School City',
-      'state':       'State',
+      'name':          'Name',
+      'id':            'ID',
+      'pw':            'PW',
+      'password':      'PW',
+      'school name':   'School Name',
+      'class section': 'Class Section',
+      'classsection':  'Class Section',
+      'class':         'Class Section',
+      'udise code':    'UDISE Code',
+      'udise':         'UDISE Code',
+      'school city':   'School City',
+      'city':          'School City',
+      'state':         'State',
     },
     validators: {
       'UDISE Code': (v) => /^\d{11}$/.test(String(v).trim()) || 'UDISE Code must be 11 digits',
@@ -138,11 +138,12 @@ const SCHEMAS = {
 
   adobe_teacher_accounts: {
     label: 'Adobe Teacher Accounts',
-    required: ['Name', 'ID', 'Password', 'School Name', 'UDISE Code', 'School City', 'State'],
+    required: ['Name', 'ID', 'PW', 'School Name', 'UDISE Code', 'School City', 'State'],
     aliases: {
       'name':        'Name',
       'id':          'ID',
-      'password':    'Password',
+      'pw':          'PW',
+      'password':    'PW',
       'school name': 'School Name',
       'udise code':  'UDISE Code',
       'udise':       'UDISE Code',
@@ -156,7 +157,7 @@ const SCHEMAS = {
   },
 };
 
-// ── Parse file
+// ── Parse file ────────────────────────────────────────────────────────────────
 const parseFile = async (filePath) => {
   const ext = path.extname(filePath).toLowerCase();
 
@@ -207,7 +208,6 @@ const parseCSVLine = (line) => {
 };
 
 const parseXLS = (filePath) => {
-  // Dynamic require — xlsx must be installed
   const XLSX = require('xlsx');
   const wb   = XLSX.readFile(filePath);
   const ws   = wb.Sheets[wb.SheetNames[0]];
@@ -225,14 +225,13 @@ const parseXLS = (filePath) => {
   return { headers, rows };
 };
 
-// ── Validate 
+// ── Validate ──────────────────────────────────────────────────────────────────
 const validateFile = (parsed, documentType) => {
   const schema = SCHEMAS[documentType];
   if (!schema) throw new Error(`Unknown document type: ${documentType}`);
 
   const { headers, rows } = parsed;
 
-  // Normalise incoming headers using aliases
   const normalise = (h) => {
     const lower = h.toLowerCase().trim();
     return schema.aliases[lower] || h;
@@ -240,7 +239,6 @@ const validateFile = (parsed, documentType) => {
 
   const normalisedHeaders = headers.map(normalise);
 
-  // Check required columns
   const missing = schema.required.filter(req => !normalisedHeaders.includes(req));
   if (missing.length > 0) {
     return {
@@ -248,11 +246,13 @@ const validateFile = (parsed, documentType) => {
       errors:  [`Missing required columns: ${missing.join(', ')}`],
       missing,
       rows:    [],
+      totalRows: 0,
+      validRows: 0,
       headers: normalisedHeaders,
+      schema:  schema.label,
     };
   }
 
-  // Validate rows
   const rowErrors = [];
   const validRows = [];
 
@@ -262,14 +262,12 @@ const validateFile = (parsed, documentType) => {
 
     const errs = [];
 
-    // Check required fields not empty
     schema.required.forEach(col => {
       if (!normRow[col] && normRow[col] !== 0) {
         errs.push(`Row ${idx + 2}: "${col}" is empty`);
       }
     });
 
-    // Run field validators
     if (schema.validators) {
       Object.entries(schema.validators).forEach(([col, fn]) => {
         if (normRow[col]) {

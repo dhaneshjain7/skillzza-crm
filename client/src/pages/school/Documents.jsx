@@ -5,10 +5,10 @@ import API from '../../api/axios';
 
 const DOC_TYPES = [
   { key: 'school_approval',        label: 'School Approval',         icon: '🏫', desc: 'SL No, School Name, City, State, UDISE Code, Board, Student/Teacher Count, SPOC details' },
-  { key: 'student_data',           label: 'Student Data',            icon: '🎓', desc: 'First Name, Last Name, Grade, Section, Skillzza UID, School Name, City/State, UDISE Code' },
+  { key: 'student_data',           label: 'Student Data',            icon: '🎓', desc: 'First Name, Last Name, Grade, Section, School Name, City/State, UDISE Code' },
   { key: 'teacher_data',           label: 'Teacher Data',            icon: '👩‍🏫', desc: 'First Name, Last Name, School Name, School City, UDISE Code' },
-  { key: 'adobe_student_accounts', label: 'Adobe Student Accounts',  icon: '💻', desc: 'Name, ID, Password, School Name, Class, UDISE Code, School City, State' },
-  { key: 'adobe_teacher_accounts', label: 'Adobe Teacher Accounts',  icon: '💻', desc: 'Name, ID, Password, School Name, UDISE Code, School City, State' },
+  { key: 'adobe_student_accounts', label: 'Adobe Student Accounts',  icon: '💻', desc: 'Name, ID, PW, School Name, Class Section, UDISE Code, City, State' },
+  { key: 'adobe_teacher_accounts', label: 'Adobe Teacher Accounts',  icon: '💻', desc: 'Name, ID, PW, School Name, UDISE Code, City, State' },
 ];
 
 const STATUS_STYLE = {
@@ -358,3 +358,4 @@ const sectionTitle = { fontSize: '0.9rem', fontWeight: '700', color: '#1e293b', 
 const emptyStyle  = { textAlign: 'center', padding: '2rem', color: '#94a3b8', fontSize: '0.85rem' };
 
 export default SchoolDocuments;
+

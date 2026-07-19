@@ -11,7 +11,7 @@ require('dotenv').config();
 const app        = express();
 const httpServer = createServer(app);
 
-// ── Socket.io
+//Socket.io
 const io = new Server(httpServer, {
   cors: { origin: process.env.CLIENT_URL, credentials: true },
 });

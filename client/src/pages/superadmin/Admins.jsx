@@ -12,7 +12,8 @@ const AdminsPage = () => {
   const [search,  setSearch]  = useState('');
   const [searchIn,setSearchIn]= useState('');
   const [showAddModal, setShowAddModal] = useState(false);
-  const [selectedAdmin, setSelectedAdmin] = useState(null); // for detail/assign view
+  const [selectedAdmin, setSelectedAdmin] = useState(null);   // for Manage Schools modal
+  const [resetAdmin, setResetAdmin]       = useState(null);   // for Reset Password modal
 
   const fetchAdmins = useCallback(async () => {
     setLoading(true);
@@ -103,8 +104,12 @@ const AdminsPage = () => {
               {/* Actions */}
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                 <button onClick={() => setSelectedAdmin(admin)}
-                  style={{ flex: 1, padding: '0.5rem', background: '#e8f0f9', border: 'none', borderRadius: '7px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '600', color: '#1e3a5f', fontFamily: 'inherit' }}>
+                  style={{ flex: 1, minWidth: '110px', padding: '0.5rem', background: '#e8f0f9', border: 'none', borderRadius: '7px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '600', color: '#1e3a5f', fontFamily: 'inherit' }}>
                   🏫 Manage Schools
+                </button>
+                <button onClick={() => setResetAdmin(admin)}
+                  style={{ flex: 1, minWidth: '110px', padding: '0.5rem', background: '#ede9fe', border: 'none', borderRadius: '7px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '600', color: '#6d28d9', fontFamily: 'inherit' }}>
+                  🔑 Reset Password
                 </button>
                 <button onClick={() => handleToggleActive(admin)}
                   style={{ padding: '0.5rem 0.75rem', background: admin.isActive ? '#fee2e2' : '#d1fae5', border: 'none', borderRadius: '7px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '600', color: admin.isActive ? '#991b1b' : '#065f46', fontFamily: 'inherit' }}>
@@ -124,6 +129,11 @@ const AdminsPage = () => {
       {/* Manage Schools Modal */}
       {selectedAdmin && (
         <ManageSchoolsModal admin={selectedAdmin} onClose={() => setSelectedAdmin(null)} onUpdated={fetchAdmins} />
+      )}
+
+      {/* Reset Password Modal */}
+      {resetAdmin && (
+        <ResetPasswordModal admin={resetAdmin} onClose={() => setResetAdmin(null)} />
       )}
     </Layout>
   );
@@ -176,6 +186,99 @@ const AddAdminModal = ({ onClose, onCreated }) => {
   );
 };
 
+// ── Reset Password Modal ───────────────────────────────────────────────────────
+const ResetPasswordModal = ({ admin, onClose }) => {
+  const [newPassword, setNewPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState('');
+  const [done, setDone]     = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (!newPassword || newPassword.length < 6) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await API.put(`/admins/${admin._id}/reset-password`, { newPassword });
+      setDone(true);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to reset password.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (done) {
+    return (
+      <div style={overlay} onClick={onClose}>
+        <div style={{ ...modal, maxWidth: '420px' }} onClick={e => e.stopPropagation()}>
+          <div style={{ padding: '2rem 1.5rem', textAlign: 'center' }}>
+            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>✅</div>
+            <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.05rem', fontWeight: '800', color: '#1e293b' }}>Password Reset!</h3>
+            <p style={{ margin: '0 0 1.5rem', fontSize: '0.85rem', color: '#64748b' }}>
+              Share the new password with <strong>{admin.name}</strong>
+            </p>
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1rem', textAlign: 'left', marginBottom: '1.5rem' }}>
+              <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '2px' }}>New Password</div>
+              <div style={{ fontSize: '0.95rem', fontWeight: '700', color: '#1e293b' }}>{newPassword}</div>
+            </div>
+            <p style={{ fontSize: '0.72rem', color: '#94a3b8', marginBottom: '1.25rem' }}>
+              ⚠️ This password won't be shown again once you close this window.
+            </p>
+            <button onClick={onClose} style={{ ...saveBtn, width: '100%' }}>Done</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={overlay} onClick={onClose}>
+      <div style={{ ...modal, maxWidth: '420px' }} onClick={e => e.stopPropagation()}>
+        <div style={modalHeader}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: '800', color: '#1e293b' }}>🔑 Reset Password</h3>
+            <p style={{ margin: '2px 0 0', fontSize: '0.78rem', color: '#64748b' }}>{admin.name} · {admin.email}</p>
+          </div>
+          <button onClick={onClose} style={closeBtn}>✕</button>
+        </div>
+
+        {error && <div style={{ margin: '1rem 1.5rem 0', padding: '0.7rem 1rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', fontSize: '0.82rem', color: '#dc2626' }}>⚠ {error}</div>}
+
+        <form onSubmit={handleSubmit} style={{ padding: '1.5rem' }}>
+          <label style={{ fontSize: '0.75rem', fontWeight: '600', color: '#374151', display: 'block', marginBottom: '0.3rem' }}>New Password</label>
+          <div style={{ position: 'relative', marginBottom: '1.25rem' }}>
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={newPassword}
+              onChange={e => setNewPassword(e.target.value)}
+              placeholder="Min. 6 characters"
+              autoFocus
+              style={{ width: '100%', boxSizing: 'border-box', padding: '0.55rem 2.25rem 0.55rem 0.75rem', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '0.875rem', outline: 'none', fontFamily: 'inherit', color: '#1e293b' }}
+            />
+            <button type="button" onClick={() => setShowPassword(p => !p)}
+              style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.9rem' }}>
+              {showPassword ? '🙈' : '👁'}
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+            <button type="button" onClick={onClose} style={cancelBtn}>Cancel</button>
+            <button type="submit" disabled={saving || newPassword.length < 6}
+              style={{ ...saveBtn, opacity: (saving || newPassword.length < 6) ? 0.6 : 1, cursor: (saving || newPassword.length < 6) ? 'not-allowed' : 'pointer' }}>
+              {saving ? 'Resetting...' : '✓ Reset Password'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 // ── Manage Schools Modal ───────────────────────────────────────────────────────
 const ManageSchoolsModal = ({ admin, onClose, onUpdated }) => {
   const [assignedSchools, setAssignedSchools] = useState([]);
@@ -214,12 +317,6 @@ const ManageSchoolsModal = ({ admin, onClose, onUpdated }) => {
     }
   };
 
-  const handleUnassign = async (schoolId) => {
-    // Reassign to no one isn't directly supported by the API (assignAdmin requires adminId)
-    // So we prompt them to reassign to another admin instead, or just leave a note.
-    alert('To remove this school from this admin, assign it to a different admin using the dropdown below.');
-  };
-
   const unassignedSchools = allSchools.filter(s => !assignedSchools.find(a => a._id === s._id));
 
   return (
@@ -238,7 +335,6 @@ const ManageSchoolsModal = ({ admin, onClose, onUpdated }) => {
             <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>Loading...</div>
           ) : (
             <>
-              {/* Assign new school */}
               <div style={{ marginBottom: '1.5rem', padding: '1rem', background: '#f8fafc', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
                 <label style={{ fontSize: '0.78rem', fontWeight: '700', color: '#374151', display: 'block', marginBottom: '0.5rem' }}>
                   Assign a School to {admin.name}
@@ -261,7 +357,6 @@ const ManageSchoolsModal = ({ admin, onClose, onUpdated }) => {
                 )}
               </div>
 
-              {/* Currently assigned */}
               <div style={{ fontSize: '0.78rem', fontWeight: '700', color: '#374151', marginBottom: '0.75rem' }}>
                 Currently Assigned ({assignedSchools.length})
               </div>

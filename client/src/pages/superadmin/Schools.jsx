@@ -60,7 +60,7 @@ const SchoolsPage = ({ role = 'superadmin' }) => {
       {/* Filters */}
       <div style={{ display:'flex', gap:'0.75rem', marginBottom:'1rem', flexWrap:'wrap' }}>
         <form onSubmit={handleSearch} style={{ display:'flex', gap:'0.5rem', flex:1, minWidth:'260px' }}>
-          <input type="text" placeholder="Search name, email, city, district..."
+          <input type="text" placeholder="Search name, email, UDISE code, city, district..."
             value={searchIn} onChange={e => setSearchIn(e.target.value)}
             style={{ flex:1, padding:'0.55rem 0.875rem', border:'1.5px solid #e2e8f0', borderRadius:'8px', fontSize:'0.875rem', outline:'none', fontFamily:'inherit' }} />
           <button type="submit" style={{ background: accent, color:'#fff', border:'none', borderRadius:'8px', padding:'0.55rem 1rem', fontSize:'0.875rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit' }}>Search</button>

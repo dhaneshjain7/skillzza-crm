@@ -134,6 +134,7 @@ const SchoolDetail = () => {
     setForm({
       schoolName:         s.schoolName         || '',
       registrationNumber: s.registrationNumber || '',
+      udiseCode:          s.udiseCode          || '',
       email:              s.email              || '',
       phone:              s.phone              || '',
       altPhone:           s.altPhone           || '',
@@ -170,6 +171,7 @@ const SchoolDetail = () => {
       const payload = {
         schoolName:         form.schoolName,
         registrationNumber: form.registrationNumber,
+        udiseCode:          form.udiseCode,
         email:              form.email,
         phone:              form.phone,
         altPhone:           form.altPhone,
@@ -307,6 +309,7 @@ const SchoolDetail = () => {
           <InfoCard title="Basic Details" items={[
             { label:'School Name',      value: school.schoolName },
             { label:'Registration No.', value: school.registrationNumber || 'Not provided' },
+            { label:'UDISE Code',       value: school.udiseCode || 'Not provided' },
             { label:'Board',            value: school.board || '—' },
             { label:'Type',             value: school.schoolType || '—' },
             { label:'Est. Year',        value: school.establishedYear || '—' },
@@ -470,7 +473,8 @@ const SchoolDetail = () => {
             <Section title="Basic Details">
               <Row><Field label="School Name *"        name="schoolName"         value={form.schoolName}         onChange={handleChange} required /><Field label="Registration Number" name="registrationNumber" value={form.registrationNumber} onChange={handleChange} /></Row>
               <Row><Field label="Email *"              name="email"              value={form.email}              onChange={handleChange} required type="email" /><Field label="Phone *" name="phone" value={form.phone} onChange={handleChange} required /></Row>
-              <Row><Field label="Alt Phone"            name="altPhone"           value={form.altPhone}           onChange={handleChange} /><Field label="Website" name="website" value={form.website} onChange={handleChange} /></Row>
+              <Row><Field label="UDISE Code"           name="udiseCode"          value={form.udiseCode}          onChange={handleChange} placeholder="11-digit UDISE code" /><Field label="Alt Phone" name="altPhone" value={form.altPhone} onChange={handleChange} /></Row>
+              <Row><Field label="Website"              name="website"            value={form.website}            onChange={handleChange} /><div /></Row>
               <Row>
                 <SelectField label="Board" name="board" value={form.board} onChange={handleChange} options={['CBSE','ICSE','IB','State Board','Other']} />
                 <SelectField label="School Type" name="schoolType" value={form.schoolType} onChange={handleChange} options={['Primary','Secondary','Higher Secondary','College','Other']} />
@@ -667,10 +671,10 @@ const Row = ({ children }) => (
   <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.75rem', marginBottom:'0.75rem' }}>{children}</div>
 );
 
-const Field = ({ label, name, value, onChange, required, type='text', fullWidth }) => (
+const Field = ({ label, name, value, onChange, required, type='text', fullWidth, placeholder }) => (
   <div style={{ display:'flex', flexDirection:'column', gap:'0.3rem', marginBottom: fullWidth ? '0.75rem' : 0 }}>
     <label style={labelStyle}>{label}</label>
-    <input type={type} name={name} value={value} onChange={onChange} required={required}
+    <input type={type} name={name} value={value} onChange={onChange} required={required} placeholder={placeholder}
       style={{ ...inputStyle, width:'100%', boxSizing:'border-box' }} />
   </div>
 );

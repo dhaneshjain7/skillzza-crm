@@ -2,6 +2,7 @@ const path        = require('path');
 const fs          = require('fs');
 const { Document, School, AuditLog, ActivityLog } = require('../models');
 const { parseFile, validateFile, SCHEMAS }         = require('../utils/fileParser');
+const { notifyDocumentUploaded, notifyDocumentSent } = require('../utils/notificationService');
 
 // ── Helper: log ───────────────────────────────────────────────────────────────
 const log = async ({ user, action, description, schoolId, req }) => {
@@ -62,6 +63,10 @@ const uploadDocument = async (req, res) => {
     // Count existing versions
     const versionCount = await Document.countDocuments({ school: schoolId, documentType });
 
+    // Files sent by admin/superadmin (e.g. Adobe accounts) don't need review —
+    // auto-approve them. School uploads stay Pending for admin review.
+    const isStaffUpload = req.user.role !== 'school_user';
+
     // Save document record
     const doc = await Document.create({
       school:          schoolId,
@@ -75,7 +80,9 @@ const uploadDocument = async (req, res) => {
       fileExtension:   path.extname(req.file.originalname).toLowerCase().replace('.', ''),
       documentType,
       description:     description || '',
-      status:          'Pending',
+      status:          isStaffUpload ? 'Approved' : 'Pending',
+      reviewedBy:      isStaffUpload ? req.user._id : null,
+      reviewedAt:      isStaffUpload ? new Date() : null,
       version:         versionCount + 1,
       isLatestVersion: true,
       // Store parsed data
@@ -101,6 +108,14 @@ const uploadDocument = async (req, res) => {
     });
 
     await log({ user: req.user, action: 'Document Uploaded', description: `Uploaded ${documentType}: ${req.file.originalname}`, schoolId, req });
+
+    // Notify the other side: school upload → assigned admin; staff upload → school user
+    const io = req.app.get('io');
+    if (isStaffUpload) {
+      await notifyDocumentSent({ school, document: doc, sentBy: req.user, io });
+    } else {
+      await notifyDocumentUploaded({ school, document: doc, uploadedBy: req.user, io });
+    }
 
     res.status(201).json({
       success:    true,

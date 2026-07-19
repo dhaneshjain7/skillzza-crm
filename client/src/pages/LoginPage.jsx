@@ -9,15 +9,18 @@ import GoogleSignInButton from '../components/auth/GoogleSignInButton';
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 const LoginPage = ({ roleConfig }) => {
-  const { login, loginWithGoogle } = useAuth();
+  const { login, loginWithGoogle, registerSchool } = useAuth();
   const navigate  = useNavigate();
   const location  = useLocation();
 
-  const [form, setForm]         = useState({ email: '', password: '' });
+  const [mode, setMode]         = useState('signin'); // 'signin' | 'register'
+  const [form, setForm]         = useState({ name: '', schoolName: '', phone: '', email: '', password: '', confirmPassword: '' });
   const [error, setError]       = useState('');
   const [loading, setLoading]   = useState(false);
   const [showPass, setShowPass] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+
+  const isRegister = roleConfig.allowRegister && mode === 'register';
 
   const from = location.state?.from?.pathname || roleConfig.dashboardPath;
 
@@ -37,6 +40,24 @@ const LoginPage = ({ roleConfig }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (isRegister) {
+      const { name, schoolName, phone, email, password, confirmPassword } = form;
+      if (!name || !schoolName || !phone || !email || !password) {
+        setError('All fields are required.'); return;
+      }
+      if (password.length < 6) { setError('Password must be at least 6 characters.'); return; }
+      if (password !== confirmPassword) { setError('Passwords do not match.'); return; }
+
+      setLoading(true);
+      const result = await registerSchool({ name, schoolName, phone, email, password, confirmPassword });
+      setLoading(false);
+
+      if (!result.success) { setError(result.message); return; }
+      goToDashboard(result.user.role);
+      return;
+    }
+
     if (!form.email || !form.password) { setError('Email and password are required.'); return; }
 
     setLoading(true);
@@ -92,8 +113,12 @@ const LoginPage = ({ roleConfig }) => {
           {roleConfig.icon}  {roleConfig.label} Login
         </div>
 
-        <h2 style={s.title}>Welcome back</h2>
-        <p style={s.subtitle}>{roleConfig.subtitle}</p>
+        <h2 style={s.title}>{isRegister ? 'Register your school' : 'Welcome back'}</h2>
+        <p style={s.subtitle}>
+          {isRegister
+            ? 'Create your school account — you can complete your school profile after signing in'
+            : roleConfig.subtitle}
+        </p>
 
         {error && (
           <div style={s.errorBox}>⚠ {error}</div>
@@ -111,13 +136,42 @@ const LoginPage = ({ roleConfig }) => {
             </div>
             <div style={s.divider}>
               <div style={s.dividerLine} />
-              <span style={s.dividerText}>or sign in with email</span>
+              <span style={s.dividerText}>{isRegister ? 'or register with email' : 'or sign in with email'}</span>
               <div style={s.dividerLine} />
             </div>
           </>
         )}
 
         <form onSubmit={handleSubmit} style={s.form}>
+          {isRegister && (
+            <>
+              <div style={s.field}>
+                <label style={s.label}>Your name</label>
+                <input
+                  type="text" name="name" value={form.name}
+                  onChange={handleChange} placeholder="e.g. Rahul Sharma"
+                  style={s.input} autoComplete="name"
+                />
+              </div>
+              <div style={s.field}>
+                <label style={s.label}>School name</label>
+                <input
+                  type="text" name="schoolName" value={form.schoolName}
+                  onChange={handleChange} placeholder="e.g. Sunrise Public School"
+                  style={s.input} autoComplete="organization"
+                />
+              </div>
+              <div style={s.field}>
+                <label style={s.label}>Phone number</label>
+                <input
+                  type="tel" name="phone" value={form.phone}
+                  onChange={handleChange} placeholder="e.g. 9876543210"
+                  style={s.input} autoComplete="tel"
+                />
+              </div>
+            </>
+          )}
+
           <div style={s.field}>
             <label style={s.label}>Email address</label>
             <input
@@ -135,7 +189,7 @@ const LoginPage = ({ roleConfig }) => {
                 value={form.password} onChange={handleChange}
                 placeholder="••••••••"
                 style={{ ...s.input, paddingRight: '44px' }}
-                autoComplete="current-password"
+                autoComplete={isRegister ? 'new-password' : 'current-password'}
               />
               <button type="button" onClick={() => setShowPass(p => !p)}
                 style={s.eyeBtn} tabIndex={-1}>
@@ -144,11 +198,38 @@ const LoginPage = ({ roleConfig }) => {
             </div>
           </div>
 
+          {isRegister && (
+            <div style={s.field}>
+              <label style={s.label}>Confirm password</label>
+              <input
+                type={showPass ? 'text' : 'password'} name="confirmPassword"
+                value={form.confirmPassword} onChange={handleChange}
+                placeholder="••••••••" style={s.input}
+                autoComplete="new-password"
+              />
+            </div>
+          )}
+
           <button type="submit" disabled={loading}
             style={{ ...s.submitBtn, background: roleConfig.accent, opacity: loading ? 0.7 : 1 }}>
-            {loading ? 'Signing in...' : `Sign in as ${roleConfig.label}`}
+            {loading
+              ? (isRegister ? 'Creating account...' : 'Signing in...')
+              : (isRegister ? 'Register School' : `Sign in as ${roleConfig.label}`)}
           </button>
         </form>
+
+        {roleConfig.allowRegister && (
+          <p style={s.switchMode}>
+            {isRegister ? 'Already have an account?' : 'New school on Skillzza?'}{' '}
+            <button
+              type="button"
+              onClick={() => { setError(''); setMode(m => (m === 'signin' ? 'register' : 'signin')); }}
+              style={{ ...s.switchBtn, color: roleConfig.accent }}
+            >
+              {isRegister ? 'Sign in' : 'Register here'}
+            </button>
+          </p>
+        )}
 
         {showGoogle && (
           <p style={s.googleNote}>
@@ -193,6 +274,8 @@ const s = {
   dividerLine: { flex: 1, height: '1px', background: '#e2e8f0' },
   dividerText: { fontSize: '0.72rem', color: '#94a3b8', whiteSpace: 'nowrap' },
   googleNote: { fontSize: '0.72rem', color: '#94a3b8', textAlign: 'center', marginTop: '0.875rem' },
+  switchMode: { fontSize: '0.82rem', color: '#64748b', textAlign: 'center', marginTop: '1rem', marginBottom: 0 },
+  switchBtn:  { background: 'none', border: 'none', padding: 0, fontSize: '0.82rem', fontWeight: '600', cursor: 'pointer', textDecoration: 'underline' },
 };
 
 export default LoginPage;

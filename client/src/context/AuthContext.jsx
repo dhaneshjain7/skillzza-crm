@@ -54,6 +54,21 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
+  // Email/password self-registration — School login page only
+  const registerSchool = useCallback(async (formData) => {
+    dispatch({ type: 'SET_LOADING', payload: true });
+    try {
+      const { data } = await API.post('/auth/register/school', formData);
+      localStorage.setItem('accessToken', data.accessToken);
+      dispatch({ type: 'LOGIN_SUCCESS', payload: data.user });
+      return { success: true, user: data.user };
+    } catch (err) {
+      const message = err.response?.data?.message || 'Registration failed. Please try again.';
+      dispatch({ type: 'SET_ERROR', payload: message });
+      return { success: false, message };
+    }
+  }, []);
+
   // Google Sign-In — currently used by the School login page
   const loginWithGoogle = useCallback(async (credential) => {
     dispatch({ type: 'SET_LOADING', payload: true });
@@ -86,7 +101,7 @@ export const AuthProvider = ({ children }) => {
   const isSchoolUser = state.user?.role === 'school_user';
 
   return (
-    <AuthContext.Provider value={{ ...state, login, loginWithGoogle, logout, updateUser, isSuperAdmin, isAdmin, isSchoolUser }}>
+    <AuthContext.Provider value={{ ...state, login, loginWithGoogle, registerSchool, logout, updateUser, isSuperAdmin, isAdmin, isSchoolUser }}>
       {children}
     </AuthContext.Provider>
   );

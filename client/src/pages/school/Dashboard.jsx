@@ -49,6 +49,7 @@ const SchoolDashboard = () => {
   const initForm = (s) => {
     setForm({
       registrationNumber:  s.registrationNumber  || '',
+      udiseCode:           s.udiseCode            || '',
       schoolName:          s.schoolName           || '',
       email:               s.email                || '',
       phone:               s.phone                || '',
@@ -82,6 +83,7 @@ const SchoolDashboard = () => {
     try {
       const payload = {
         registrationNumber: form.registrationNumber,
+        udiseCode:          form.udiseCode,
         schoolName:         form.schoolName,
         email:              form.email,
         phone:              form.phone,
@@ -133,6 +135,14 @@ const SchoolDashboard = () => {
   const currentIdx = STATUS_ORDER.indexOf(school?.currentStatus);
   const completion = calcCompletion(school);
 
+  // Donut = pipeline progress: 100% at Completed (and beyond, e.g. Archived).
+  // Rejected sits at the same stage as Approved ("Approval / Rejection").
+  const COMPLETED_IDX = STATUS_ORDER.indexOf('Completed');
+  const progressIdx   = school?.currentStatus === 'Rejected'
+    ? STATUS_ORDER.indexOf('Approved')
+    : currentIdx;
+  const progress = progressIdx < 0 ? 0 : Math.min(100, Math.round(((progressIdx + 1) / (COMPLETED_IDX + 1)) * 100));
+
   return (
     <Layout>
       {loading ? (
@@ -181,15 +191,15 @@ const SchoolDashboard = () => {
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:'0.75rem', flexShrink:0 }}>
                 <svg width="72" height="72" viewBox="0 0 72 72">
                   <circle cx="36" cy="36" r="28" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="8" />
-                  {completion >= 100 ? (
+                  {progress >= 100 ? (
                     <circle cx="36" cy="36" r="28" fill="none" stroke="#fff" strokeWidth="8" />
                   ) : (
                     <circle cx="36" cy="36" r="28" fill="none" stroke="#fff" strokeWidth="8"
-                      strokeDasharray={`${(completion/100)*175.9} 175.9`} strokeDashoffset="43.98" strokeLinecap="round" />
+                      strokeDasharray={`${(progress/100)*175.9} 175.9`} strokeDashoffset="43.98" strokeLinecap="round" />
                   )}
-                  <text x="36" y="40" textAnchor="middle" fontSize="13" fontWeight="800" fill="#fff">{completion}%</text>
+                  <text x="36" y="40" textAnchor="middle" fontSize="13" fontWeight="800" fill="#fff">{progress}%</text>
                 </svg>
-                <div style={{ fontSize:'0.65rem', color:'rgba(255,255,255,0.6)' }}>Profile</div>
+                <div style={{ fontSize:'0.65rem', color:'rgba(255,255,255,0.6)' }}>Progress</div>
                 <button onClick={() => { setEditMode(e => !e); initForm(school); }}
                   style={{ padding:'0.45rem 1rem', background: editMode ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.2)', border:'1px solid rgba(255,255,255,0.4)', borderRadius:'8px', color:'#fff', cursor:'pointer', fontSize:'0.78rem', fontWeight:'600', fontFamily:'inherit' }}>
                   {editMode ? '✕ Cancel' : '✏️ Edit Profile'}
@@ -212,6 +222,10 @@ const SchoolDashboard = () => {
                   <Row>
                     <Field label="School Name *"         name="schoolName"         value={form.schoolName}         onChange={handleChange} required />
                     <Field label="Registration Number"   name="registrationNumber" value={form.registrationNumber} onChange={handleChange} />
+                  </Row>
+                  <Row>
+                    <Field label="UDISE Code"            name="udiseCode"          value={form.udiseCode}          onChange={handleChange} />
+                    <div />
                   </Row>
                   <Row>
                     <Field label="Email *"               name="email"              value={form.email}              onChange={handleChange} required type="email" />
@@ -319,6 +333,7 @@ const SchoolDashboard = () => {
                 <div style={{ display:'flex', flexDirection:'column', gap:'0.5rem' }}>
                   {[
                     { label:'Registration No.', value: school.registrationNumber || 'Not provided' },
+                    { label:'UDISE Code',       value: school.udiseCode || 'Not provided' },
                     { label:'Board',            value: school.board || 'Not specified' },
                     { label:'Type',             value: school.schoolType || 'Not specified' },
                     { label:'Est. Year',        value: school.establishedYear || '—' },

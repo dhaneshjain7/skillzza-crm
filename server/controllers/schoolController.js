@@ -49,7 +49,7 @@ const createSchool = async (req, res) => {
       schoolName, email, phone, address,
       principal, management, schoolType,
       board, establishedYear, website,
-      registrationNumber, studentCount,
+      registrationNumber, udiseCode, studentCount,
       staffCount, tags, assignedAdmin,
       loginEmail, loginPassword,
     } = req.body;
@@ -100,6 +100,7 @@ const createSchool = async (req, res) => {
       establishedYear,
       website,
       registrationNumber,
+      udiseCode,
       studentCount,
       staffCount,
       tags,
@@ -207,6 +208,7 @@ const getSchools = async (req, res) => {
         { email:              new RegExp(search, 'i') },
         { phone:              new RegExp(search, 'i') },
         { registrationNumber: new RegExp(search, 'i') },
+        { udiseCode:          new RegExp(search, 'i') },
         { 'address.city':     new RegExp(search, 'i') },
         { 'address.state':    new RegExp(search, 'i') },
         { 'address.district': new RegExp(search, 'i') },
@@ -274,12 +276,22 @@ const updateSchool = async (req, res) => {
 
     // School user can only update their own profile fields — not admin-only fields
     if (req.user.role === 'school_user') {
-      const allowedForSchool = ['schoolName', 'registrationNumber', 'email', 'phone', 'altPhone', 'website',
+      const allowedForSchool = ['schoolName', 'registrationNumber', 'udiseCode', 'email', 'phone', 'altPhone', 'website',
         'address', 'principal', 'management', 'establishedYear', 'studentCount', 'staffCount', 'logo'];
       Object.keys(req.body).forEach(key => {
         if (!allowedForSchool.includes(key)) delete req.body[key];
       });
     }
+
+    // Optional enum selects arrive as '' when nothing is chosen — a value the
+    // enum validator rejects. Treat '' as "clear this field" instead of failing.
+    const unset = {};
+    ['schoolType'].forEach((f) => {
+      if (req.body[f] === '') {
+        delete req.body[f];
+        if (school[f] !== undefined) unset[f] = 1;
+      }
+    });
 
     // Track changes for audit
     const changes = {};
@@ -291,8 +303,8 @@ const updateSchool = async (req, res) => {
 
     const updated = await School.findByIdAndUpdate(
       req.params.id,
-      { $set: req.body },
-      { new: true, runValidators: true, returnDocument: 'after' }
+      Object.keys(unset).length ? { $set: req.body, $unset: unset } : { $set: req.body },
+      { runValidators: true, returnDocument: 'after' }
     ).populate('assignedAdmin', 'name email');
 
     // Audit log
