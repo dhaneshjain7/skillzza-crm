@@ -4,7 +4,7 @@ import Layout from '../../components/layout/Layout';
 import API from '../../api/axios';
 
 const DOC_TYPES = [
-  { key: 'school_approval',        label: 'School Approval',         icon: '🏫', desc: 'SL No, School Name, City, State, UDISE Code, Board, Student/Teacher Count, SPOC details' },
+  { key: 'school_approval',        label: 'School Approval',         icon: '🏫', desc: 'SL NO, School Name, City/District, State, UDISE Code, Board (CBSE/ICSE/IB/SB), Student Count (6-12), Teacher Count (6-12), SPOC Name, SPOC Mobile, SPOC Email' },
   { key: 'student_data',           label: 'Student Data',            icon: '🎓', desc: 'First Name, Last Name, Grade, Section, School Name, City/State, UDISE Code' },
   { key: 'teacher_data',           label: 'Teacher Data',            icon: '👩‍🏫', desc: 'First Name, Last Name, School Name, School City, UDISE Code' },
   { key: 'adobe_student_accounts', label: 'Adobe Student Accounts',  icon: '💻', desc: 'Name, ID, PW, School Name, Class Section, UDISE Code, City, State' },

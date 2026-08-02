@@ -228,12 +228,12 @@ const changePassword = async (req, res) => {
 // them in straight away — same flow as first-time Google Sign-In.
 const registerSchool = async (req, res) => {
   try {
-    const { name, schoolName, email, phone, password, confirmPassword } = req.body;
+    const { name, schoolName, udiseCode, email, phone, password, confirmPassword } = req.body;
 
-    if (!name || !schoolName || !email || !phone || !password) {
+    if (!name || !schoolName || !udiseCode || !email || !phone || !password) {
       return res.status(400).json({
         success: false,
-        message: 'Name, school name, email, phone and password are required.',
+        message: 'Name, school name, UDISE code, email, phone and password are required.',
       });
     }
 
@@ -267,30 +267,38 @@ const registerSchool = async (req, res) => {
       isActive: true,
     });
 
-    const school = await School.create({
-      schoolName:    schoolName.trim(),
-      email:         normalizedEmail,
-      phone:         phone.trim(),
-      address:       { city: 'Not set', state: 'Not set' },
-      currentStatus: 'New',
-      schoolUser:    newUser._id,
-    });
+    try {
+      const school = await School.create({
+        schoolName:    schoolName.trim(),
+        udiseCode:     udiseCode.trim(),
+        email:         normalizedEmail,
+        phone:         phone.trim(),
+        address:       { city: 'Not set', state: 'Not set' },
+        currentStatus: 'New',
+        schoolUser:    newUser._id,
+      });
 
-    await SchoolStatusHistory.create({
-      school:        school._id,
-      oldStatus:     null,
-      newStatus:     'New',
-      updatedBy:     newUser._id,
-      updatedByRole: 'school_user',
-      remarks:       'Self-registered with email and password',
-    });
+      await SchoolStatusHistory.create({
+        school:        school._id,
+        oldStatus:     null,
+        newStatus:     'New',
+        updatedBy:     newUser._id,
+        updatedByRole: 'school_user',
+        remarks:       'Self-registered with email and password',
+      });
 
-    await logActivity({
-      user: newUser,
-      action: 'School Created',
-      description: `${newUser.name} self-registered ${school.schoolName}`,
-      req,
-    });
+      await logActivity({
+        user: newUser,
+        action: 'School Created',
+        description: `${newUser.name} self-registered ${school.schoolName}`,
+        req,
+      });
+    } catch (err) {
+      // Roll back the user account if the linked School couldn't be created —
+      // otherwise they end up with a login but "No school linked" forever.
+      await User.findByIdAndDelete(newUser._id);
+      throw err;
+    }
 
     await sendTokens(newUser, 201, res, req);
   } catch (err) {
@@ -365,30 +373,38 @@ const googleAuthSchool = async (req, res) => {
       isActive: true,
     });
 
-    const school = await School.create({
-      schoolName:    payload.name ? `${payload.name}'s School` : 'New School (Pending Setup)',
-      email,
-      phone:         '0000000000', // placeholder — school must fill this in via Edit Profile
-      address:       { city: 'Not set', state: 'Not set' },
-      currentStatus: 'New',
-      schoolUser:    newUser._id,
-    });
+    try {
+      const school = await School.create({
+        schoolName:    payload.name ? `${payload.name}'s School` : 'New School (Pending Setup)',
+        udiseCode:     'Not set', // placeholder — school must fill this in via Edit Profile
+        email,
+        phone:         '0000000000', // placeholder — school must fill this in via Edit Profile
+        address:       { city: 'Not set', state: 'Not set' },
+        currentStatus: 'New',
+        schoolUser:    newUser._id,
+      });
 
-    await SchoolStatusHistory.create({
-      school:        school._id,
-      oldStatus:     null,
-      newStatus:     'New',
-      updatedBy:     newUser._id,
-      updatedByRole: 'school_user',
-      remarks:       'Self-registered via Google Sign-In',
-    });
+      await SchoolStatusHistory.create({
+        school:        school._id,
+        oldStatus:     null,
+        newStatus:     'New',
+        updatedBy:     newUser._id,
+        updatedByRole: 'school_user',
+        remarks:       'Self-registered via Google Sign-In',
+      });
 
-    await logActivity({
-      user: newUser,
-      action: 'School Created',
-      description: `${newUser.name} self-registered via Google Sign-In`,
-      req,
-    });
+      await logActivity({
+        user: newUser,
+        action: 'School Created',
+        description: `${newUser.name} self-registered via Google Sign-In`,
+        req,
+      });
+    } catch (err) {
+      // Roll back the user account if the linked School couldn't be created —
+      // otherwise they end up with a login but "No school linked" forever.
+      await User.findByIdAndDelete(newUser._id);
+      throw err;
+    }
 
     await sendTokens(newUser, 201, res, req);
   } catch (err) {

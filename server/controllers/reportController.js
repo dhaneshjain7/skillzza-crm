@@ -49,6 +49,7 @@ const schoolsReport = async (req, res) => {
     const rows = schools.map((s, i) => ({
       'SL No':          i + 1,
       'School Name':    s.schoolName,
+      'UDISE Code':     s.udiseCode || '',
       'Email':          s.email,
       'Phone':          s.phone,
       'City':           s.address?.city || '',

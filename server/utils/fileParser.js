@@ -31,6 +31,7 @@ const SCHEMAS = {
       'udise code':                   'UDISE CODE',
       'udise':                        'UDISE CODE',
       'board (cbse/icse/ib/ sb)':     'Board (CBSE/ICSE/IB/ SB)',
+      'board (cbse/icse/ib/sb)':      'Board (CBSE/ICSE/IB/ SB)',
       'board':                        'Board (CBSE/ICSE/IB/ SB)',
       'student count (6-12)':         'Student Count (6-12)',
       'student count':                'Student Count (6-12)',
@@ -211,16 +212,34 @@ const parseXLS = (filePath) => {
   const XLSX = require('xlsx');
   const wb   = XLSX.readFile(filePath);
   const ws   = wb.Sheets[wb.SheetNames[0]];
-  const data = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
 
-  if (data.length === 0) throw new Error('Spreadsheet is empty');
+  // Read as a raw grid first — some templates have a merged title row
+  // (e.g. "School Approval Format") above the real header row, which would
+  // otherwise get mistaken for the header row.
+  const grid = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false, blankrows: false });
+  if (grid.length === 0) throw new Error('Spreadsheet is empty');
 
-  const headers = Object.keys(data[0]);
-  const rows    = data.map(row => {
-    const clean = {};
-    Object.entries(row).forEach(([k, v]) => { clean[k.trim()] = String(v).trim(); });
-    return clean;
-  });
+  let headerRowIdx = 0;
+  let bestCount    = 0;
+  const scanLimit  = Math.min(grid.length, 5);
+  for (let i = 0; i < scanLimit; i++) {
+    const nonEmpty = grid[i].filter(c => String(c).trim() !== '').length;
+    if (nonEmpty > bestCount) {
+      bestCount   = nonEmpty;
+      headerRowIdx = i;
+    }
+  }
+
+  const headers = grid[headerRowIdx].map(h => String(h).trim());
+  const rows = grid.slice(headerRowIdx + 1)
+    .filter(r => r.some(c => String(c).trim() !== ''))
+    .map(r => {
+      const clean = {};
+      headers.forEach((h, idx) => { clean[h] = String(r[idx] ?? '').trim(); });
+      return clean;
+    });
+
+  if (rows.length === 0) throw new Error('No data rows found');
 
   return { headers, rows };
 };
@@ -233,7 +252,9 @@ const validateFile = (parsed, documentType) => {
   const { headers, rows } = parsed;
 
   const normalise = (h) => {
-    const lower = h.toLowerCase().trim();
+    // Collapse embedded line breaks/extra spaces (common when a header cell
+    // word-wraps in Excel, e.g. "Board (CBSE/ICSE/IB/\n SB)") before matching.
+    const lower = h.replace(/\s+/g, ' ').trim().toLowerCase();
     return schema.aliases[lower] || h;
   };
 

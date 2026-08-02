@@ -54,10 +54,10 @@ const createSchool = async (req, res) => {
       loginEmail, loginPassword,
     } = req.body;
 
-    if (!schoolName || !email || !phone) {
+    if (!schoolName || !email || !phone || !udiseCode) {
       return res.status(400).json({
         success: false,
-        message: 'School name, email and phone are required.',
+        message: 'School name, email, phone and UDISE code are required.',
       });
     }
 
@@ -277,7 +277,7 @@ const updateSchool = async (req, res) => {
     // School user can only update their own profile fields — not admin-only fields
     if (req.user.role === 'school_user') {
       const allowedForSchool = ['schoolName', 'registrationNumber', 'udiseCode', 'email', 'phone', 'altPhone', 'website',
-        'address', 'principal', 'management', 'establishedYear', 'studentCount', 'staffCount', 'logo'];
+        'address', 'principal', 'management', 'establishedYear', 'studentCount', 'staffCount', 'logo', 'poeSubmitted'];
       Object.keys(req.body).forEach(key => {
         if (!allowedForSchool.includes(key)) delete req.body[key];
       });
@@ -286,7 +286,7 @@ const updateSchool = async (req, res) => {
     // Optional enum selects arrive as '' when nothing is chosen — a value the
     // enum validator rejects. Treat '' as "clear this field" instead of failing.
     const unset = {};
-    ['schoolType'].forEach((f) => {
+    ['schoolType', 'cptTrainingLevel'].forEach((f) => {
       if (req.body[f] === '') {
         delete req.body[f];
         if (school[f] !== undefined) unset[f] = 1;
@@ -329,6 +329,9 @@ const updateSchool = async (req, res) => {
     res.status(200).json({ success: true, school: updated });
   } catch (err) {
     console.error('updateSchool error:', err);
+    if (err.name === 'ValidationError') {
+      return res.status(400).json({ success: false, message: Object.values(err.errors).map(e => e.message).join(' ') });
+    }
     res.status(500).json({ success: false, message: 'Server error.' });
   }
 };

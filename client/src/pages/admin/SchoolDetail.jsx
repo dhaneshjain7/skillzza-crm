@@ -155,6 +155,8 @@ const SchoolDetail = () => {
       'management.name':  s.management?.name   || '',
       'management.designation': s.management?.designation || '',
       'management.phone': s.management?.phone  || '',
+      poeSubmitted:        s.poeSubmitted       || 'No',
+      cptTrainingLevel:    s.cptTrainingLevel   || '',
     });
   };
 
@@ -198,6 +200,8 @@ const SchoolDetail = () => {
           designation: form['management.designation'],
           phone:       form['management.phone'],
         },
+        poeSubmitted: form.poeSubmitted,
+        cptTrainingLevel: form.cptTrainingLevel,
       };
       const res = await API.put(`/schools/${schoolId}`, payload);
       setSchool(res.data.school);
@@ -316,6 +320,8 @@ const SchoolDetail = () => {
             { label:'Website',          value: school.website || '—' },
             { label:'Students (6-12)',  value: school.studentCount || '—' },
             { label:'Staff (6-12)',     value: school.staffCount || '—' },
+            { label:'POE Submitted',    value: school.poeSubmitted || 'No' },
+            { label:'CPT Training Level', value: school.cptTrainingLevel || 'Not set' },
           ]} />
           <InfoCard title="Contact Details" items={[
             { label:'Email',     value: school.email },
@@ -473,7 +479,7 @@ const SchoolDetail = () => {
             <Section title="Basic Details">
               <Row><Field label="School Name *"        name="schoolName"         value={form.schoolName}         onChange={handleChange} required /><Field label="Registration Number" name="registrationNumber" value={form.registrationNumber} onChange={handleChange} /></Row>
               <Row><Field label="Email *"              name="email"              value={form.email}              onChange={handleChange} required type="email" /><Field label="Phone *" name="phone" value={form.phone} onChange={handleChange} required /></Row>
-              <Row><Field label="UDISE Code"           name="udiseCode"          value={form.udiseCode}          onChange={handleChange} placeholder="11-digit UDISE code" /><Field label="Alt Phone" name="altPhone" value={form.altPhone} onChange={handleChange} /></Row>
+              <Row><Field label="UDISE Code *"         name="udiseCode"          value={form.udiseCode}          onChange={handleChange} required placeholder="11-digit UDISE code" /><Field label="Alt Phone" name="altPhone" value={form.altPhone} onChange={handleChange} /></Row>
               <Row><Field label="Website"              name="website"            value={form.website}            onChange={handleChange} /><div /></Row>
               <Row>
                 <SelectField label="Board" name="board" value={form.board} onChange={handleChange} options={['CBSE','ICSE','IB','State Board','Other']} />
@@ -494,6 +500,16 @@ const SchoolDetail = () => {
             <Section title="Management Information">
               <Row><Field label="Management Name" name="management.name" value={form['management.name']} onChange={handleChange} /><Field label="Designation" name="management.designation" value={form['management.designation']} onChange={handleChange} /></Row>
               <Field label="Management Phone" name="management.phone" value={form['management.phone']} onChange={handleChange} fullWidth />
+              <Row>
+                <SelectField label="POE Submitted" name="poeSubmitted" value={form.poeSubmitted} onChange={handleChange} options={['Yes','No']} />
+                <div />
+              </Row>
+            </Section>
+            <Section title="CPT Training Level">
+              <Row>
+                <SelectField label="CPT Training Level" name="cptTrainingLevel" value={form.cptTrainingLevel} onChange={handleChange} options={['CPT1','CPT2','CPT3','CPT4','CPT5']} />
+                <div />
+              </Row>
             </Section>
             <div style={{ display:'flex', gap:'0.75rem', justifyContent:'flex-end', paddingTop:'1rem', borderTop:'1px solid #f1f5f9' }}>
               <button type="button" onClick={() => { setTab('overview'); initForm(school); }} style={cancelBtn}>Cancel</button>

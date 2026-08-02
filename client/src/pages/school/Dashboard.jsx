@@ -71,6 +71,7 @@ const SchoolDashboard = () => {
       'management.name':   s.management?.name     || '',
       'management.designation': s.management?.designation || '',
       'management.phone':  s.management?.phone    || '',
+      poeSubmitted:        s.poeSubmitted          || 'No',
     });
   };
 
@@ -111,6 +112,7 @@ const SchoolDashboard = () => {
           designation: form['management.designation'],
           phone:       form['management.phone'],
         },
+        poeSubmitted: form.poeSubmitted,
       };
 
       const res = await API.put(`/schools/${school._id}`, payload);
@@ -185,6 +187,10 @@ const SchoolDashboard = () => {
                     <div style={{ fontSize:'0.65rem', color:'rgba(255,255,255,0.5)', textTransform:'uppercase' }}>Phone</div>
                     <div style={{ fontSize:'0.82rem', fontWeight:'600' }}>{school.phone}</div>
                   </div>
+                  <div>
+                    <div style={{ fontSize:'0.65rem', color:'rgba(255,255,255,0.5)', textTransform:'uppercase' }}>Assigned Admin</div>
+                    <div style={{ fontSize:'0.82rem', fontWeight:'600' }}>{school.assignedAdmin?.name || 'Not yet assigned'}</div>
+                  </div>
                 </div>
               </div>
               {/* Profile completion + Edit */}
@@ -224,7 +230,7 @@ const SchoolDashboard = () => {
                     <Field label="Registration Number"   name="registrationNumber" value={form.registrationNumber} onChange={handleChange} />
                   </Row>
                   <Row>
-                    <Field label="UDISE Code"            name="udiseCode"          value={form.udiseCode}          onChange={handleChange} />
+                    <Field label="UDISE Code *"          name="udiseCode"          value={form.udiseCode}          onChange={handleChange} required />
                     <div />
                   </Row>
                   <Row>
@@ -280,6 +286,11 @@ const SchoolDashboard = () => {
                     <Field label="Designation"      name="management.designation" value={form['management.designation']} onChange={handleChange} />
                   </Row>
                   <Field label="Management Phone"   name="management.phone"       value={form['management.phone']}       onChange={handleChange} fullWidth />
+                  <Row>
+                    <SelectField label="POE Submitted" name="poeSubmitted" value={form.poeSubmitted} onChange={handleChange}
+                      options={['Yes','No']} />
+                    <div />
+                  </Row>
                 </Section>
 
                 {/* Submit */}
@@ -332,8 +343,12 @@ const SchoolDashboard = () => {
                 <h3 style={sTitle}>School Information</h3>
                 <div style={{ display:'flex', flexDirection:'column', gap:'0.5rem' }}>
                   {[
+                    { label:'Assigned Admin',   value: school.assignedAdmin?.name || 'Not yet assigned' },
+                    { label:'Admin Email',      value: school.assignedAdmin?.email || '—' },
+                    { label:'Admin Phone',      value: school.assignedAdmin?.phone || '—' },
                     { label:'Registration No.', value: school.registrationNumber || 'Not provided' },
                     { label:'UDISE Code',       value: school.udiseCode || 'Not provided' },
+                    { label:'CPT Training Level', value: school.cptTrainingLevel || 'Not set' },
                     { label:'Board',            value: school.board || 'Not specified' },
                     { label:'Type',             value: school.schoolType || 'Not specified' },
                     { label:'Est. Year',        value: school.establishedYear || '—' },

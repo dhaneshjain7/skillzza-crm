@@ -5,7 +5,7 @@ const AddSchoolModal = ({ onClose, onCreated }) => {
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState('');
   const [form, setForm] = useState({
-    schoolName: '', registrationNumber: '', email: '', phone: '', altPhone: '', website: '',
+    schoolName: '', registrationNumber: '', udiseCode: '', email: '', phone: '', altPhone: '', website: '',
     board: '', schoolType: '', establishedYear: '', studentCount: '', staffCount: '',
     'address.street': '', 'address.city': '', 'address.district': '', 'address.state': '', 'address.pincode': '',
     'principal.name': '', 'principal.email': '', 'principal.phone': '',
@@ -22,8 +22,8 @@ const AddSchoolModal = ({ onClose, onCreated }) => {
     e.preventDefault();
     setError('');
 
-    if (!form.schoolName || !form.email || !form.phone) {
-      setError('School Name, Email and Phone are required.');
+    if (!form.schoolName || !form.udiseCode || !form.email || !form.phone) {
+      setError('School Name, UDISE Code, Email and Phone are required.');
       return;
     }
 
@@ -43,6 +43,7 @@ const AddSchoolModal = ({ onClose, onCreated }) => {
       const payload = {
         schoolName:         form.schoolName,
         registrationNumber: form.registrationNumber,
+        udiseCode:           form.udiseCode,
         email:               form.email,
         phone:               form.phone,
         altPhone:            form.altPhone,
@@ -142,6 +143,10 @@ const AddSchoolModal = ({ onClose, onCreated }) => {
             <Row>
               <Field label="School Name *" name="schoolName" value={form.schoolName} onChange={handleChange} required />
               <Field label="Registration Number" name="registrationNumber" value={form.registrationNumber} onChange={handleChange} />
+            </Row>
+            <Row>
+              <Field label="UDISE Code *" name="udiseCode" value={form.udiseCode} onChange={handleChange} required placeholder="11-digit UDISE code" />
+              <div />
             </Row>
             <Row>
               <Field label="Email *" name="email" value={form.email} onChange={handleChange} required type="email" />

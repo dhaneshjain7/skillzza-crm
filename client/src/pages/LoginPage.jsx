@@ -14,7 +14,7 @@ const LoginPage = ({ roleConfig }) => {
   const location  = useLocation();
 
   const [mode, setMode]         = useState('signin'); // 'signin' | 'register'
-  const [form, setForm]         = useState({ name: '', schoolName: '', phone: '', email: '', password: '', confirmPassword: '' });
+  const [form, setForm]         = useState({ name: '', schoolName: '', udiseCode: '', phone: '', email: '', password: '', confirmPassword: '' });
   const [error, setError]       = useState('');
   const [loading, setLoading]   = useState(false);
   const [showPass, setShowPass] = useState(false);
@@ -42,15 +42,15 @@ const LoginPage = ({ roleConfig }) => {
     e.preventDefault();
 
     if (isRegister) {
-      const { name, schoolName, phone, email, password, confirmPassword } = form;
-      if (!name || !schoolName || !phone || !email || !password) {
+      const { name, schoolName, udiseCode, phone, email, password, confirmPassword } = form;
+      if (!name || !schoolName || !udiseCode || !phone || !email || !password) {
         setError('All fields are required.'); return;
       }
       if (password.length < 6) { setError('Password must be at least 6 characters.'); return; }
       if (password !== confirmPassword) { setError('Passwords do not match.'); return; }
 
       setLoading(true);
-      const result = await registerSchool({ name, schoolName, phone, email, password, confirmPassword });
+      const result = await registerSchool({ name, schoolName, udiseCode, phone, email, password, confirmPassword });
       setLoading(false);
 
       if (!result.success) { setError(result.message); return; }
@@ -159,6 +159,14 @@ const LoginPage = ({ roleConfig }) => {
                   type="text" name="schoolName" value={form.schoolName}
                   onChange={handleChange} placeholder="e.g. Sunrise Public School"
                   style={s.input} autoComplete="organization"
+                />
+              </div>
+              <div style={s.field}>
+                <label style={s.label}>UDISE code</label>
+                <input
+                  type="text" name="udiseCode" value={form.udiseCode}
+                  onChange={handleChange} placeholder="11-digit UDISE code"
+                  style={s.input}
                 />
               </div>
               <div style={s.field}>

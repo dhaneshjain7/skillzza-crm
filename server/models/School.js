@@ -19,7 +19,7 @@ const schoolSchema = new mongoose.Schema(
     // ── Basic Details ──────────────────────────────────────────────────────────
     schoolName:        { type: String, required: true, trim: true },
     registrationNumber:{ type: String, trim: true },
-    udiseCode:         { type: String, trim: true },   // 11-digit UDISE code — searchable
+    udiseCode:         { type: String, required: true, trim: true },   // 11-digit UDISE code — searchable
     schoolType:        { type: String, enum: ['Primary', 'Secondary', 'Higher Secondary', 'College', 'Other'] },
     board:             { type: String, trim: true },   // CBSE, ICSE, State, etc.
     establishedYear:   { type: Number },
@@ -77,9 +77,13 @@ const schoolSchema = new mongoose.Schema(
     ],
 
     // ── Additional metadata ───────────────────────────────────────────────────
-    studentCount: { type: Number },
-    staffCount:   { type: Number },
-    tags:         [{ type: String, trim: true }],
+    studentCount:  { type: Number },
+    staffCount:    { type: Number },
+    tags:          [{ type: String, trim: true }],
+    poeSubmitted:  { type: String, enum: ['Yes', 'No'], default: 'No' },
+
+    // ── CPT Training Level — set by Admin/SuperAdmin only, view-only for school ──
+    cptTrainingLevel: { type: String, enum: ['CPT1', 'CPT2', 'CPT3', 'CPT4', 'CPT5'] },
   },
   { timestamps: true }
 );
