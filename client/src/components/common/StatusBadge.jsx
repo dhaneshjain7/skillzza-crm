@@ -1,10 +1,9 @@
 const MAP = {
   'New':                { bg:'#dbeafe', color:'#1d4ed8' },
   'Contacted':          { bg:'#fef9c3', color:'#854d0e' },
-  'Documents Pending':  { bg:'#ffedd5', color:'#9a3412' },
-  'Documents Received': { bg:'#dcfce7', color:'#15803d' },
+  'LOI Pending':        { bg:'#ffedd5', color:'#9a3412' },
+  'LOI Received':       { bg:'#dcfce7', color:'#15803d' },
   'Verification':       { bg:'#ede9fe', color:'#6d28d9' },
-  'Approved':           { bg:'#d1fae5', color:'#065f46' },
   'Rejected':           { bg:'#fee2e2', color:'#991b1b' },
   'Completed':          { bg:'#d1fae5', color:'#065f46' },
   'Archived':           { bg:'#f1f5f9', color:'#475569' },

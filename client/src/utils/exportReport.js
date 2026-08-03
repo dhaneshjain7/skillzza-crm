@@ -52,6 +52,17 @@ export const exportExcel = (rows, reportLabel, reportKey) => {
   XLSX.writeFile(wb, `${reportKey}_report_${today()}.xlsx`);
 };
 
+// ── CSV ───────────────────────────────────────────────────────────────────────
+export const exportCSV = (rows, reportLabel, reportKey) => {
+  const headers = Object.keys(rows[0]);
+  const escape = (v) => {
+    const str = String(v ?? '');
+    return str.includes(',') || str.includes('\n') || str.includes('"') ? `"${str.replace(/"/g, '""')}"` : str;
+  };
+  const csv = [headers.join(','), ...rows.map(r => headers.map(h => escape(r[h])).join(','))].join('\n');
+  downloadBlob(new Blob([csv], { type: 'text/csv' }), `${reportKey}_report_${today()}.csv`);
+};
+
 // ── Word ──────────────────────────────────────────────────────────────────────
 export const exportWord = (rows, reportLabel, reportKey) => {
   const headers = Object.keys(rows[0]);

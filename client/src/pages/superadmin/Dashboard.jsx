@@ -24,9 +24,9 @@ const BarChart = ({ data }) => {
 // Donut-style status distribution
 const StatusDonut = ({ counts, total }) => {
   const STATUS_COLORS = {
-    'New':'#3b82f6','Contacted':'#f59e0b','Documents Pending':'#f97316',
-    'Documents Received':'#22c55e','Verification':'#8b5cf6',
-    'Approved':'#10b981','Rejected':'#ef4444','Completed':'#06b6d4','Archived':'#94a3b8',
+    'New':'#3b82f6','Contacted':'#f59e0b','LOI Pending':'#f97316',
+    'LOI Received':'#22c55e','Verification':'#8b5cf6',
+    'Rejected':'#ef4444','Completed':'#06b6d4','Archived':'#94a3b8',
   };
   const entries = Object.entries(counts).filter(([,v]) => v > 0);
   if (entries.length === 0) return <div style={{ color:'#94a3b8', fontSize:'0.8rem', textAlign:'center', padding:'1rem' }}>No schools yet</div>;
@@ -107,16 +107,14 @@ const SuperAdminDashboard = () => {
   const sc         = stats?.statusCounts || {};
   const total      = stats?.total || 0;
   const totalAdmins= stats?.totalAdmins || 0;
-  const inProgress = (sc['Contacted']||0)+(sc['Documents Pending']||0)+(sc['Documents Received']||0)+(sc['Verification']||0);
 
   const STATS = [
     { label:'Total Schools',  value: total,              icon:'🏫', color:'#1e3a5f', bg:'#e8f0f9', sub:'All time' },
     { label:'Total Admins',   value: totalAdmins,        icon:'👥', color:'#6d28d9', bg:'#ede9fe', sub:'Active administrators' },
     { label:'New',            value: sc['New']||0,        icon:'🆕', color:'#1d4ed8', bg:'#dbeafe', sub:'Awaiting contact' },
-    { label:'In Progress',    value: inProgress,          icon:'⏳', color:'#92400e', bg:'#fef3c7', sub:'Active pipeline' },
-    { label:'Approved',       value: sc['Approved']||0,   icon:'✅', color:'#065f46', bg:'#d1fae5', sub:'Successfully verified' },
-    { label:'Rejected',       value: sc['Rejected']||0,   icon:'⛔', color:'#991b1b', bg:'#fee2e2', sub:'Did not qualify' },
     { label:'Completed',      value: sc['Completed']||0,  icon:'🎓', color:'#0e7490', bg:'#cffafe', sub:'Fully onboarded' },
+    { label:'Hackathon Participated', value: stats?.hackathonParticipated||0, icon:'🏆', color:'#6d28d9', bg:'#ede9fe', sub:'Schools that took part' },
+    { label:'DCAIS Received', value: stats?.dcaisReceived||0, icon:'📑', color:'#0e7490', bg:'#cffafe', sub:'DCAIS confirmations received' },
   ];
 
   return (

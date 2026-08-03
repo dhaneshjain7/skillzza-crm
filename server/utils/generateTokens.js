@@ -2,6 +2,18 @@ const jwt        = require('jsonwebtoken');
 const crypto     = require('crypto');
 const RefreshToken = require('../models/RefreshToken');
 
+// Cross-domain deploys (client and server on different domains) need
+// sameSite: 'none' for the browser to send this cookie on the client's XHR/
+// fetch calls to the server — 'lax'/'strict' block that even with CORS
+// credentials: true. 'none' requires secure: true, which is why both are
+// tied to NODE_ENV here. Locally (localhost:5173 -> localhost:5000) the two
+// ports count as same-site, so 'lax' + non-secure works fine over http.
+const REFRESH_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure:   process.env.NODE_ENV === 'production',
+  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+};
+
 // ── Access Token (short-lived, sent in response body)
 const generateAccessToken = (user) => {
   return jwt.sign(
@@ -54,10 +66,8 @@ const sendTokens = async (user, statusCode, res, req) => {
 
   // httpOnly cookie — 7 days
   res.cookie('refreshToken', refreshToken, {
-    httpOnly: true,
-    secure:   process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
-    maxAge:   7 * 24 * 60 * 60 * 1000, // 7 days in ms
+    ...REFRESH_COOKIE_OPTIONS,
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
   });
 
   res.status(statusCode).json({
@@ -74,4 +84,4 @@ const sendTokens = async (user, statusCode, res, req) => {
   });
 };
 
-module.exports = { generateAccessToken, generateRefreshToken, sendTokens };
+module.exports = { generateAccessToken, generateRefreshToken, sendTokens, REFRESH_COOKIE_OPTIONS };

@@ -40,7 +40,7 @@ const AdminDashboard = () => {
         const [statsRes, schoolsRes, pendingRes] = await Promise.all([
           API.get('/schools/stats'),
           API.get('/schools?limit=5&sortBy=updatedAt&order=desc'),
-          API.get('/schools?status=Documents%20Pending&limit=5'),
+          API.get('/schools?status=LOI%20Pending&limit=5'),
         ]);
         setStats(statsRes.data.stats);
         setSchools(schoolsRes.data.schools);
@@ -69,13 +69,13 @@ const AdminDashboard = () => {
 
   const sc    = stats?.statusCounts || {};
   const total = stats?.total || 0;
-  const inProgress = (sc['Contacted']||0)+(sc['Documents Pending']||0)+(sc['Documents Received']||0)+(sc['Verification']||0);
 
   const STATS = [
     { label:'Assigned Schools', value: total,              icon:'🏫', color:'#1a3a5c', bg:'#dbeafe', sub:'Total assigned to you' },
-    { label:'Pending Docs',     value: sc['Documents Pending']||0, icon:'📄', color:'#9a3412', bg:'#ffedd5', sub:'Waiting for documents' },
-    { label:'In Progress',      value: inProgress,         icon:'⏳', color:'#92400e', bg:'#fef3c7', sub:'Active right now' },
+    { label:'LOI Pending',      value: sc['LOI Pending']||0, icon:'📄', color:'#9a3412', bg:'#ffedd5', sub:'Waiting for documents' },
     { label:'Completed',        value: sc['Completed']||0, icon:'✅', color:'#065f46', bg:'#d1fae5', sub:'Successfully closed' },
+    { label:'Hackathon Participated', value: stats?.hackathonParticipated||0, icon:'🏆', color:'#6d28d9', bg:'#ede9fe', sub:'Schools that took part' },
+    { label:'DCAIS Received',  value: stats?.dcaisReceived||0, icon:'📑', color:'#0e7490', bg:'#cffafe', sub:'DCAIS confirmations received' },
   ];
 
   return (
@@ -264,7 +264,7 @@ const AdminDashboard = () => {
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:'0.75rem' }}>
               {[
                 { label:'All My Schools',   icon:'🏫', path:'/admin/schools',  bg:'#dbeafe', color:'#1d4ed8' },
-                { label:'Pending Docs',     icon:'📄', path:'/admin/schools',  bg:'#ffedd5', color:'#9a3412' },
+                { label:'LOI Pending',      icon:'📄', path:'/admin/schools',  bg:'#ffedd5', color:'#9a3412' },
                 { label:'Messages',         icon:'💬', path:'/admin/messages', bg:'#d1fae5', color:'#065f46' },
                 { label:'Reports',          icon:'📊', path:'/admin/reports',  bg:'#ede9fe', color:'#6d28d9' },
               ].map(a => (

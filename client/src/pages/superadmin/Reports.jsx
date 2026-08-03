@@ -168,7 +168,7 @@ const SuperAdminReports = () => {
                 <>
                   <select value={filters.status} onChange={e => setFilters(f => ({ ...f, status: e.target.value }))} style={filterSelect}>
                     <option value="">All Statuses</option>
-                    {['New','Contacted','Documents Pending','Documents Received','Verification','Approved','Rejected','Completed','Archived'].map(s => <option key={s} value={s}>{s}</option>)}
+                    {['New','Contacted','LOI Pending','LOI Received','Verification','Approved','Rejected','Completed','Archived'].map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                   <input type="text" placeholder="State" value={filters.state} onChange={e => setFilters(f => ({ ...f, state: e.target.value }))} style={filterInput} />
                 </>

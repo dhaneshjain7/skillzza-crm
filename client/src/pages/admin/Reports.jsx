@@ -145,7 +145,7 @@ const AdminReports = () => {
               {active === 'schools' && (
                 <select value={filters.status} onChange={e => setFilters(f => ({ ...f, status: e.target.value }))} style={fSelect}>
                   <option value="">All Statuses</option>
-                  {['New','Contacted','Documents Pending','Documents Received','Verification','Approved','Rejected','Completed'].map(s => <option key={s} value={s}>{s}</option>)}
+                  {['New','Contacted','LOI Pending','LOI Received','Verification','Rejected','Completed'].map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               )}
               {active === 'growth' && (

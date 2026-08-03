@@ -5,7 +5,7 @@ import StatusBadge from '../../components/common/StatusBadge';
 import API from '../../api/axios';
 import AddSchoolModal from '../../components/school/AddSchoolModal';
 
-const STATUSES = ['','New','Contacted','Documents Pending','Documents Received','Verification','Approved','Rejected','Completed','Archived'];
+const STATUSES = ['','New','Contacted','LOI Pending','LOI Received','Verification','Rejected','Completed','Archived'];
 
 const SchoolsPage = ({ role = 'superadmin' }) => {
   const navigate        = useNavigate();

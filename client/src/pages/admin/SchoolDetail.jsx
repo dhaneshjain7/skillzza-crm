@@ -1,20 +1,59 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import Layout from '../../components/layout/Layout';
 import StatusBadge from '../../components/common/StatusBadge';
 import API from '../../api/axios';
+import { exportPDF, exportExcel, exportWord, exportCSV } from '../../utils/exportReport';
 
-const STATUSES = ['New','Contacted','Documents Pending','Documents Received','Verification','Approved','Rejected','Completed','Archived'];
+const STATUSES = ['New','Contacted','LOI Pending','LOI Received','Verification','Rejected','Completed','Archived'];
 
 const TABS = [
   { key: 'overview',  label: '📋 Overview' },
   { key: 'edit',      label: '✏️ Edit Profile' },
+  { key: 'activity',  label: '📌 Activity' },
+  { key: 'teachers',  label: '👩‍🏫 Teachers Activity' },
+  { key: 'students',  label: '🎓 Students Activity' },
   { key: 'status',    label: '🔄 Status' },
   { key: 'notes',     label: '📝 Notes' },
   { key: 'history',   label: '📜 History' },
   { key: 'audit',     label: '🔍 Audit Trail' },
 ];
+
+const ACTIVITY_FIELDS = [
+  { name: 'loiReceived',          label: 'LOI Received' },
+  { name: 'dcaisConfirmation',    label: 'DCAIS Received' },
+  { name: 'studentDataReceived',  label: 'Student Data Received' },
+  { name: 'teachersDataReceived', label: 'Teachers Data Received' },
+  { name: 'hackathonRegistered',  label: 'Hackathon Participated' },
+];
+
+const QUARTERS = ['q1', 'q2', 'q3', 'q4'];
+const QUARTER_LABELS = { q1: 'Q1', q2: 'Q2', q3: 'Q3', q4: 'Q4' };
+const MONTHS = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+const MONTH_LABELS = { jan:'Jan',feb:'Feb',mar:'Mar',apr:'Apr',may:'May',jun:'Jun',jul:'Jul',aug:'Aug',sep:'Sep',oct:'Oct',nov:'Nov',dec:'Dec' };
+
+const EXPORT_FORMATS = [
+  { key: 'pdf',   label: 'PDF',   icon: '📄' },
+  { key: 'excel', label: 'Excel', icon: '📊' },
+  { key: 'word',  label: 'Word',  icon: '📝' },
+  { key: 'csv',   label: 'CSV',   icon: '📃' },
+];
+
+const blankTeacher = () => ({
+  name: '',
+  cpdQuarterly: { q1: false, q2: false, q3: false, q4: false },
+  dcaisMonthly: { jan:false,feb:false,mar:false,apr:false,may:false,jun:false,jul:false,aug:false,sep:false,oct:false,nov:false,dec:false },
+  certificateReceived: false,
+});
+
+const blankStudent = () => ({
+  name: '',
+  mauQuarterly: { q1: false, q2: false, q3: false, q4: false },
+  dcaisMonthly: { jan:false,feb:false,mar:false,apr:false,may:false,jun:false,jul:false,aug:false,sep:false,oct:false,nov:false,dec:false },
+  certificateReceived: false,
+  certificateLink: '',
+});
 
 const SchoolDetail = () => {
   const { schoolId } = useParams();
@@ -44,6 +83,40 @@ const SchoolDetail = () => {
   // Edit form state
   const [form, setForm] = useState({});
 
+  // Activity tab state
+  const [activityForm, setActivityForm] = useState({});
+  const [savingActivity, setSavingActivity] = useState(false);
+
+  // Teachers Activity tab state
+  const [teachers, setTeachers] = useState([]);
+  const [savingTeachers, setSavingTeachers] = useState(false);
+  const [teacherExportOpen, setTeacherExportOpen] = useState(false);
+  const teacherExportRef = useRef(null);
+
+  // Close teacher export dropdown on outside click
+  useEffect(() => {
+    const onClick = (e) => {
+      if (teacherExportRef.current && !teacherExportRef.current.contains(e.target)) setTeacherExportOpen(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
+
+  // Students Activity tab state
+  const [students, setStudents] = useState([]);
+  const [savingStudents, setSavingStudents] = useState(false);
+  const [studentExportOpen, setStudentExportOpen] = useState(false);
+  const studentExportRef = useRef(null);
+
+  // Close student export dropdown on outside click
+  useEffect(() => {
+    const onClick = (e) => {
+      if (studentExportRef.current && !studentExportRef.current.contains(e.target)) setStudentExportOpen(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
+
   // Status update state
   const [statusForm, setStatusForm] = useState({ newStatus: '', remarks: '', reason: '' });
 
@@ -64,6 +137,9 @@ const SchoolDetail = () => {
       ]);
       setSchool(schoolRes.data.school);
       initForm(schoolRes.data.school);
+      initActivityForm(schoolRes.data.school);
+      initTeachersForm(schoolRes.data.school);
+      initStudentsForm(schoolRes.data.school);
       setHistory(histRes.data.history || []);
       setAudit(auditRes.data.logs || []);
 
@@ -156,8 +232,67 @@ const SchoolDetail = () => {
       'management.designation': s.management?.designation || '',
       'management.phone': s.management?.phone  || '',
       poeSubmitted:        s.poeSubmitted       || 'No',
-      cptTrainingLevel:    s.cptTrainingLevel   || '',
+      cpdTrainingLevel:    s.cpdTrainingLevel   || '',
     });
+  };
+
+  const initActivityForm = (s) => {
+    setActivityForm({
+      loiReceived:          s.loiReceived          || 'No',
+      dcaisConfirmation:    s.dcaisConfirmation    || 'No',
+      studentDataReceived:  s.studentDataReceived  || 'No',
+      teachersDataReceived: s.teachersDataReceived || 'No',
+      hackathonRegistered:  s.hackathonRegistered  || 'No',
+    });
+  };
+
+  const initTeachersForm = (s) => {
+    setTeachers((s.teachersActivity || []).map(t => ({
+      _id: t._id,
+      name: t.name || '',
+      cpdQuarterly: { ...blankTeacher().cpdQuarterly, ...t.cpdQuarterly },
+      dcaisMonthly: { ...blankTeacher().dcaisMonthly, ...t.dcaisMonthly },
+      certificateReceived: !!t.certificateReceived,
+    })));
+  };
+
+  const addTeacherRow    = () => setTeachers(prev => [...prev, blankTeacher()]);
+  const removeTeacherRow = (idx) => setTeachers(prev => prev.filter((_, i) => i !== idx));
+
+  const updateTeacherField = (idx, path, value) => {
+    setTeachers(prev => prev.map((t, i) => {
+      if (i !== idx) return t;
+      if (path.includes('.')) {
+        const [parent, child] = path.split('.');
+        return { ...t, [parent]: { ...t[parent], [child]: value } };
+      }
+      return { ...t, [path]: value };
+    }));
+  };
+
+  const initStudentsForm = (s) => {
+    setStudents((s.studentsActivity || []).map(t => ({
+      _id: t._id,
+      name: t.name || '',
+      mauQuarterly: { ...blankStudent().mauQuarterly, ...t.mauQuarterly },
+      dcaisMonthly: { ...blankStudent().dcaisMonthly, ...t.dcaisMonthly },
+      certificateReceived: !!t.certificateReceived,
+      certificateLink: t.certificateLink || '',
+    })));
+  };
+
+  const addStudentRow    = () => setStudents(prev => [...prev, blankStudent()]);
+  const removeStudentRow = (idx) => setStudents(prev => prev.filter((_, i) => i !== idx));
+
+  const updateStudentField = (idx, path, value) => {
+    setStudents(prev => prev.map((t, i) => {
+      if (i !== idx) return t;
+      if (path.includes('.')) {
+        const [parent, child] = path.split('.');
+        return { ...t, [parent]: { ...t[parent], [child]: value } };
+      }
+      return { ...t, [path]: value };
+    }));
   };
 
   const showMsg = (text) => {
@@ -201,7 +336,7 @@ const SchoolDetail = () => {
           phone:       form['management.phone'],
         },
         poeSubmitted: form.poeSubmitted,
-        cptTrainingLevel: form.cptTrainingLevel,
+        cpdTrainingLevel: form.cpdTrainingLevel,
       };
       const res = await API.put(`/schools/${schoolId}`, payload);
       setSchool(res.data.school);
@@ -213,6 +348,97 @@ const SchoolDetail = () => {
     } finally {
       setSaving(false);
     }
+  };
+
+  // ── Save activity flags ───────────────────────────────────────────────────
+  const handleActivitySave = async (e) => {
+    e.preventDefault();
+    setSavingActivity(true);
+    try {
+      const res = await API.put(`/schools/${schoolId}`, activityForm);
+      setSchool(res.data.school);
+      initActivityForm(res.data.school);
+      showMsg('✅ Activity updated successfully!');
+    } catch (e) {
+      showMsg('❌ ' + (e.response?.data?.message || 'Update failed'));
+    } finally {
+      setSavingActivity(false);
+    }
+  };
+
+  // ── Save teachers activity ────────────────────────────────────────────────
+  const handleTeachersSave = async (e) => {
+    e.preventDefault();
+    setSavingTeachers(true);
+    try {
+      const res = await API.put(`/schools/${schoolId}`, { teachersActivity: teachers });
+      setSchool(res.data.school);
+      initTeachersForm(res.data.school);
+      showMsg('✅ Teachers activity updated successfully!');
+    } catch (e) {
+      showMsg('❌ ' + (e.response?.data?.message || 'Update failed'));
+    } finally {
+      setSavingTeachers(false);
+    }
+  };
+
+  // ── Export teachers activity ──────────────────────────────────────────────
+  const buildTeacherExportRows = () => teachers.map(t => {
+    const row = { 'Teacher Name': t.name || '—' };
+    QUARTERS.forEach(q => { row[`CPD ${QUARTER_LABELS[q]}`] = t.cpdQuarterly[q] ? 'Yes' : 'No'; });
+    MONTHS.forEach(m => { row[`DCAIS ${MONTH_LABELS[m]}`] = t.dcaisMonthly[m] ? 'Yes' : 'No'; });
+    row['Certificate Received'] = t.certificateReceived ? 'Yes' : 'No';
+    return row;
+  });
+
+  const handleExportTeachers = (fmt) => {
+    setTeacherExportOpen(false);
+    const rows = buildTeacherExportRows();
+    if (rows.length === 0) { showMsg('❌ No teachers to export.'); return; }
+
+    const label = `${school.schoolName} — Teachers Activity`;
+    if (fmt === 'pdf')   exportPDF(rows, label, 'teachers_activity');
+    if (fmt === 'excel') exportExcel(rows, label, 'teachers_activity');
+    if (fmt === 'word')  exportWord(rows, label, 'teachers_activity');
+    if (fmt === 'csv')   exportCSV(rows, label, 'teachers_activity');
+  };
+
+  // ── Save students activity ────────────────────────────────────────────────
+  const handleStudentsSave = async (e) => {
+    e.preventDefault();
+    setSavingStudents(true);
+    try {
+      const res = await API.put(`/schools/${schoolId}`, { studentsActivity: students });
+      setSchool(res.data.school);
+      initStudentsForm(res.data.school);
+      showMsg('✅ Students activity updated successfully!');
+    } catch (e) {
+      showMsg('❌ ' + (e.response?.data?.message || 'Update failed'));
+    } finally {
+      setSavingStudents(false);
+    }
+  };
+
+  // ── Export students activity ──────────────────────────────────────────────
+  const buildStudentExportRows = () => students.map(t => {
+    const row = { 'Student Name': t.name || '—' };
+    QUARTERS.forEach(q => { row[`MAU ${QUARTER_LABELS[q]}`] = t.mauQuarterly[q] ? 'Yes' : 'No'; });
+    MONTHS.forEach(m => { row[`DCAIS ${MONTH_LABELS[m]}`] = t.dcaisMonthly[m] ? 'Yes' : 'No'; });
+    row['Certificate Received'] = t.certificateReceived ? 'Yes' : 'No';
+    row['Certificate Link'] = t.certificateLink || '—';
+    return row;
+  });
+
+  const handleExportStudents = (fmt) => {
+    setStudentExportOpen(false);
+    const rows = buildStudentExportRows();
+    if (rows.length === 0) { showMsg('❌ No students to export.'); return; }
+
+    const label = `${school.schoolName} — Students Activity`;
+    if (fmt === 'pdf')   exportPDF(rows, label, 'students_activity');
+    if (fmt === 'excel') exportExcel(rows, label, 'students_activity');
+    if (fmt === 'word')  exportWord(rows, label, 'students_activity');
+    if (fmt === 'csv')   exportCSV(rows, label, 'students_activity');
   };
 
   // ── Update status ─────────────────────────────────────────────────────────
@@ -321,7 +547,7 @@ const SchoolDetail = () => {
             { label:'Students (6-12)',  value: school.studentCount || '—' },
             { label:'Staff (6-12)',     value: school.staffCount || '—' },
             { label:'POE Submitted',    value: school.poeSubmitted || 'No' },
-            { label:'CPT Training Level', value: school.cptTrainingLevel || 'Not set' },
+            { label:'CPD Training Level', value: school.cpdTrainingLevel || 'Not set' },
           ]} />
           <InfoCard title="Contact Details" items={[
             { label:'Email',     value: school.email },
@@ -505,15 +731,227 @@ const SchoolDetail = () => {
                 <div />
               </Row>
             </Section>
-            <Section title="CPT Training Level">
+            <Section title="CPD Training Level">
               <Row>
-                <SelectField label="CPT Training Level" name="cptTrainingLevel" value={form.cptTrainingLevel} onChange={handleChange} options={['CPT1','CPT2','CPT3','CPT4','CPT5']} />
+                <SelectField label="CPD Training Level" name="cpdTrainingLevel" value={form.cpdTrainingLevel} onChange={handleChange} options={['CPD1','CPD2','CPD3','CPD4']} />
                 <div />
               </Row>
             </Section>
             <div style={{ display:'flex', gap:'0.75rem', justifyContent:'flex-end', paddingTop:'1rem', borderTop:'1px solid #f1f5f9' }}>
               <button type="button" onClick={() => { setTab('overview'); initForm(school); }} style={cancelBtn}>Cancel</button>
               <button type="submit" disabled={saving} style={{ ...saveBtn, opacity: saving ? 0.7 : 1 }}>{saving ? 'Saving...' : '✓ Save Changes'}</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ── TAB: Activity ── */}
+      {tab === 'activity' && (
+        <div style={card}>
+          <h3 style={{ margin:'0 0 1.25rem', fontSize:'1rem', fontWeight:'700', color:'#1e293b' }}>📌 Activity</h3>
+          <form onSubmit={handleActivitySave}>
+            <Row>
+              {ACTIVITY_FIELDS.slice(0, 2).map(f => (
+                <SelectField key={f.name} label={f.label} name={f.name} value={activityForm[f.name]}
+                  onChange={e => setActivityForm(a => ({ ...a, [f.name]: e.target.value }))}
+                  options={['Yes', 'No']} />
+              ))}
+            </Row>
+            <Row>
+              {ACTIVITY_FIELDS.slice(2, 4).map(f => (
+                <SelectField key={f.name} label={f.label} name={f.name} value={activityForm[f.name]}
+                  onChange={e => setActivityForm(a => ({ ...a, [f.name]: e.target.value }))}
+                  options={['Yes', 'No']} />
+              ))}
+            </Row>
+            <Row>
+              <SelectField label={ACTIVITY_FIELDS[4].label} name={ACTIVITY_FIELDS[4].name} value={activityForm[ACTIVITY_FIELDS[4].name]}
+                onChange={e => setActivityForm(a => ({ ...a, [ACTIVITY_FIELDS[4].name]: e.target.value }))}
+                options={['Yes', 'No']} />
+              <div />
+            </Row>
+            <div style={{ display:'flex', gap:'0.75rem', justifyContent:'flex-end', paddingTop:'1rem', borderTop:'1px solid #f1f5f9' }}>
+              <button type="submit" disabled={savingActivity} style={{ ...saveBtn, opacity: savingActivity ? 0.7 : 1 }}>
+                {savingActivity ? 'Saving...' : '✓ Save Activity'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ── TAB: Teachers Activity ── */}
+      {tab === 'teachers' && (
+        <div style={card}>
+          <h3 style={{ margin:'0 0 1.25rem', fontSize:'1rem', fontWeight:'700', color:'#1e293b' }}>👩‍🏫 Teachers Activity</h3>
+          <form onSubmit={handleTeachersSave}>
+            <div style={{ overflowX:'auto', marginBottom:'1rem' }}>
+              <table style={{ borderCollapse:'collapse', width:'100%', minWidth:'1300px' }}>
+                <thead>
+                  <tr>
+                    <th rowSpan={2} style={th}>Teacher Name</th>
+                    <th colSpan={4} style={th}>CPD Training Quarterly</th>
+                    <th colSpan={12} style={th}>DCAIS Monthly</th>
+                    <th rowSpan={2} style={th}>Certificate Received</th>
+                    <th rowSpan={2} style={{ ...th, width:'40px' }}></th>
+                  </tr>
+                  <tr>
+                    {QUARTERS.map(q => <th key={q} style={thSub}>{QUARTER_LABELS[q]}</th>)}
+                    {MONTHS.map(m => <th key={m} style={thSub}>{MONTH_LABELS[m]}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {teachers.length === 0 ? (
+                    <tr><td colSpan={19} style={{ ...td, textAlign:'center', color:'#94a3b8', padding:'1.5rem' }}>No teachers added yet</td></tr>
+                  ) : teachers.map((t, i) => (
+                    <tr key={t._id || i}>
+                      <td style={td}>
+                        <input type="text" value={t.name} placeholder="Teacher name"
+                          onChange={e => updateTeacherField(i, 'name', e.target.value)}
+                          style={{ ...inputStyle, width:'160px', boxSizing:'border-box' }} />
+                      </td>
+                      {QUARTERS.map(q => (
+                        <td key={q} style={{ ...td, textAlign:'center' }}>
+                          <input type="checkbox" checked={!!t.cpdQuarterly[q]}
+                            onChange={e => updateTeacherField(i, `cpdQuarterly.${q}`, e.target.checked)} />
+                        </td>
+                      ))}
+                      {MONTHS.map(m => (
+                        <td key={m} style={{ ...td, textAlign:'center' }}>
+                          <input type="checkbox" checked={!!t.dcaisMonthly[m]}
+                            onChange={e => updateTeacherField(i, `dcaisMonthly.${m}`, e.target.checked)} />
+                        </td>
+                      ))}
+                      <td style={{ ...td, textAlign:'center' }}>
+                        <input type="checkbox" checked={!!t.certificateReceived}
+                          onChange={e => updateTeacherField(i, 'certificateReceived', e.target.checked)} />
+                      </td>
+                      <td style={{ ...td, textAlign:'center' }}>
+                        <button type="button" onClick={() => removeTeacherRow(i)}
+                          style={{ background:'none', border:'none', color:'#991b1b', cursor:'pointer', fontSize:'0.9rem', fontFamily:'inherit' }}>✕</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <button type="button" onClick={addTeacherRow}
+              style={{ padding:'0.5rem 1rem', background:'#f1f5f9', border:'none', borderRadius:'7px', cursor:'pointer', fontSize:'0.8rem', fontWeight:'600', color:'#475569', fontFamily:'inherit', marginBottom:'1rem' }}>
+              + Add Teacher
+            </button>
+            <div style={{ display:'flex', gap:'0.75rem', justifyContent:'flex-end', alignItems:'center', paddingTop:'1rem', borderTop:'1px solid #f1f5f9' }}>
+              <div ref={teacherExportRef} style={{ position:'relative' }}>
+                <button type="button" onClick={() => setTeacherExportOpen(o => !o)}
+                  style={{ padding:'0.65rem 1.25rem', background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:'8px', cursor:'pointer', fontSize:'0.875rem', fontWeight:'600', color:'#475569', fontFamily:'inherit', display:'flex', alignItems:'center', gap:'6px' }}>
+                  ⬇ Download <span style={{ fontSize:'0.6rem' }}>▼</span>
+                </button>
+                {teacherExportOpen && (
+                  <div style={{ position:'absolute', bottom:'calc(100% + 4px)', right:0, background:'#fff', border:'1px solid #e2e8f0', borderRadius:'10px', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', zIndex:50, minWidth:'150px', padding:'4px', overflow:'hidden' }}>
+                    {EXPORT_FORMATS.map(f => (
+                      <button key={f.key} type="button" onClick={() => handleExportTeachers(f.key)}
+                        style={{ display:'flex', alignItems:'center', gap:'8px', width:'100%', padding:'0.55rem 0.75rem', border:'none', borderRadius:'7px', cursor:'pointer', fontFamily:'inherit', textAlign:'left', background:'transparent', color:'#374151', fontSize:'0.8rem', fontWeight:'600' }}
+                        onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                        <span>{f.icon}</span> {f.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <button type="submit" disabled={savingTeachers} style={{ ...saveBtn, opacity: savingTeachers ? 0.7 : 1 }}>
+                {savingTeachers ? 'Saving...' : '✓ Save Teachers Activity'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ── TAB: Students Activity ── */}
+      {tab === 'students' && (
+        <div style={card}>
+          <h3 style={{ margin:'0 0 1.25rem', fontSize:'1rem', fontWeight:'700', color:'#1e293b' }}>🎓 Students Activity</h3>
+          <form onSubmit={handleStudentsSave}>
+            <div style={{ overflowX:'auto', marginBottom:'1rem' }}>
+              <table style={{ borderCollapse:'collapse', width:'100%', minWidth:'1500px' }}>
+                <thead>
+                  <tr>
+                    <th rowSpan={2} style={th}>Student Name</th>
+                    <th colSpan={4} style={th}>MAU Quarterly</th>
+                    <th colSpan={12} style={th}>DCAIS Monthly</th>
+                    <th rowSpan={2} style={th}>Certificate Received</th>
+                    <th rowSpan={2} style={th}>Certificate Link</th>
+                    <th rowSpan={2} style={{ ...th, width:'40px' }}></th>
+                  </tr>
+                  <tr>
+                    {QUARTERS.map(q => <th key={q} style={thSub}>{QUARTER_LABELS[q]}</th>)}
+                    {MONTHS.map(m => <th key={m} style={thSub}>{MONTH_LABELS[m]}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {students.length === 0 ? (
+                    <tr><td colSpan={20} style={{ ...td, textAlign:'center', color:'#94a3b8', padding:'1.5rem' }}>No students added yet</td></tr>
+                  ) : students.map((t, i) => (
+                    <tr key={t._id || i}>
+                      <td style={td}>
+                        <input type="text" value={t.name} placeholder="Student name"
+                          onChange={e => updateStudentField(i, 'name', e.target.value)}
+                          style={{ ...inputStyle, width:'160px', boxSizing:'border-box' }} />
+                      </td>
+                      {QUARTERS.map(q => (
+                        <td key={q} style={{ ...td, textAlign:'center' }}>
+                          <input type="checkbox" checked={!!t.mauQuarterly[q]}
+                            onChange={e => updateStudentField(i, `mauQuarterly.${q}`, e.target.checked)} />
+                        </td>
+                      ))}
+                      {MONTHS.map(m => (
+                        <td key={m} style={{ ...td, textAlign:'center' }}>
+                          <input type="checkbox" checked={!!t.dcaisMonthly[m]}
+                            onChange={e => updateStudentField(i, `dcaisMonthly.${m}`, e.target.checked)} />
+                        </td>
+                      ))}
+                      <td style={{ ...td, textAlign:'center' }}>
+                        <input type="checkbox" checked={!!t.certificateReceived}
+                          onChange={e => updateStudentField(i, 'certificateReceived', e.target.checked)} />
+                      </td>
+                      <td style={td}>
+                        <input type="text" value={t.certificateLink} placeholder="https://..."
+                          onChange={e => updateStudentField(i, 'certificateLink', e.target.value)}
+                          style={{ ...inputStyle, width:'160px', boxSizing:'border-box' }} />
+                      </td>
+                      <td style={{ ...td, textAlign:'center' }}>
+                        <button type="button" onClick={() => removeStudentRow(i)}
+                          style={{ background:'none', border:'none', color:'#991b1b', cursor:'pointer', fontSize:'0.9rem', fontFamily:'inherit' }}>✕</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <button type="button" onClick={addStudentRow}
+              style={{ padding:'0.5rem 1rem', background:'#f1f5f9', border:'none', borderRadius:'7px', cursor:'pointer', fontSize:'0.8rem', fontWeight:'600', color:'#475569', fontFamily:'inherit', marginBottom:'1rem' }}>
+              + Add Student
+            </button>
+            <div style={{ display:'flex', gap:'0.75rem', justifyContent:'flex-end', alignItems:'center', paddingTop:'1rem', borderTop:'1px solid #f1f5f9' }}>
+              <div ref={studentExportRef} style={{ position:'relative' }}>
+                <button type="button" onClick={() => setStudentExportOpen(o => !o)}
+                  style={{ padding:'0.65rem 1.25rem', background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:'8px', cursor:'pointer', fontSize:'0.875rem', fontWeight:'600', color:'#475569', fontFamily:'inherit', display:'flex', alignItems:'center', gap:'6px' }}>
+                  ⬇ Download <span style={{ fontSize:'0.6rem' }}>▼</span>
+                </button>
+                {studentExportOpen && (
+                  <div style={{ position:'absolute', bottom:'calc(100% + 4px)', right:0, background:'#fff', border:'1px solid #e2e8f0', borderRadius:'10px', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', zIndex:50, minWidth:'150px', padding:'4px', overflow:'hidden' }}>
+                    {EXPORT_FORMATS.map(f => (
+                      <button key={f.key} type="button" onClick={() => handleExportStudents(f.key)}
+                        style={{ display:'flex', alignItems:'center', gap:'8px', width:'100%', padding:'0.55rem 0.75rem', border:'none', borderRadius:'7px', cursor:'pointer', fontFamily:'inherit', textAlign:'left', background:'transparent', color:'#374151', fontSize:'0.8rem', fontWeight:'600' }}
+                        onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                        <span>{f.icon}</span> {f.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <button type="submit" disabled={savingStudents} style={{ ...saveBtn, opacity: savingStudents ? 0.7 : 1 }}>
+                {savingStudents ? 'Saving...' : '✓ Save Students Activity'}
+              </button>
             </div>
           </form>
         </div>
@@ -710,5 +1148,8 @@ const labelStyle= { fontSize:'0.75rem', fontWeight:'600', color:'#374151' };
 const inputStyle= { padding:'0.55rem 0.75rem', border:'1.5px solid #e2e8f0', borderRadius:'8px', fontSize:'0.875rem', outline:'none', fontFamily:'inherit', color:'#1e293b' };
 const cancelBtn = { padding:'0.65rem 1.25rem', background:'#f1f5f9', border:'none', borderRadius:'8px', cursor:'pointer', fontFamily:'inherit', fontWeight:'600', color:'#475569', fontSize:'0.875rem' };
 const saveBtn   = { padding:'0.65rem 1.5rem', background:'#1a3a5c', border:'none', borderRadius:'8px', cursor:'pointer', fontFamily:'inherit', fontWeight:'700', color:'#fff', fontSize:'0.875rem' };
+const th        = { padding:'0.5rem 0.6rem', background:'#f8fafc', border:'1px solid #f1f5f9', fontSize:'0.72rem', fontWeight:'700', color:'#374151', whiteSpace:'nowrap' };
+const thSub     = { ...th, fontSize:'0.68rem', color:'#64748b' };
+const td        = { padding:'0.4rem 0.6rem', border:'1px solid #f1f5f9', fontSize:'0.8rem', color:'#1e293b' };
 
 export default SchoolDetail;

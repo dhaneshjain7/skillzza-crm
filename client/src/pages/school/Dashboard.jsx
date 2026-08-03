@@ -8,15 +8,14 @@ const LIFECYCLE = [
   { stage: 'School Created',      icon: '🏫', key: 'New' },
   { stage: 'Assigned to Admin',   icon: '👤', key: 'Contacted' },
   { stage: 'Contact Initiated',   icon: '📞', key: 'Contacted' },
-  { stage: 'Documents Requested', icon: '📋', key: 'Documents Pending' },
-  { stage: 'Documents Uploaded',  icon: '📁', key: 'Documents Received' },
+  { stage: 'Documents Requested', icon: '📋', key: 'LOI Pending' },
+  { stage: 'Documents Uploaded',  icon: '📁', key: 'LOI Received' },
   { stage: 'Verification',        icon: '🔍', key: 'Verification' },
-  { stage: 'Approval / Rejection',icon: '⚖️', key: 'Approved' },
   { stage: 'Completed',           icon: '🎓', key: 'Completed' },
   { stage: 'Archived',            icon: '🗄️', key: 'Archived' },
 ];
 
-const STATUS_ORDER = ['New','Contacted','Documents Pending','Documents Received','Verification','Approved','Completed','Archived'];
+const STATUS_ORDER = ['New','Contacted','LOI Pending','LOI Received','Verification','Completed','Archived'];
 
 const SchoolDashboard = () => {
   const { user }   = useAuth();
@@ -138,10 +137,10 @@ const SchoolDashboard = () => {
   const completion = calcCompletion(school);
 
   // Donut = pipeline progress: 100% at Completed (and beyond, e.g. Archived).
-  // Rejected sits at the same stage as Approved ("Approval / Rejection").
+  // Rejected sits at the same stage as Verification, the last step before a decision.
   const COMPLETED_IDX = STATUS_ORDER.indexOf('Completed');
   const progressIdx   = school?.currentStatus === 'Rejected'
-    ? STATUS_ORDER.indexOf('Approved')
+    ? STATUS_ORDER.indexOf('Verification')
     : currentIdx;
   const progress = progressIdx < 0 ? 0 : Math.min(100, Math.round(((progressIdx + 1) / (COMPLETED_IDX + 1)) * 100));
 
@@ -348,7 +347,7 @@ const SchoolDashboard = () => {
                     { label:'Admin Phone',      value: school.assignedAdmin?.phone || '—' },
                     { label:'Registration No.', value: school.registrationNumber || 'Not provided' },
                     { label:'UDISE Code',       value: school.udiseCode || 'Not provided' },
-                    { label:'CPT Training Level', value: school.cptTrainingLevel || 'Not set' },
+                    { label:'CPD Training Level', value: school.cpdTrainingLevel || 'Not set' },
                     { label:'Board',            value: school.board || 'Not specified' },
                     { label:'Type',             value: school.schoolType || 'Not specified' },
                     { label:'Est. Year',        value: school.establishedYear || '—' },
@@ -371,7 +370,7 @@ const SchoolDashboard = () => {
               <div style={card}>
                 <h3 style={sTitle}>Pending Actions</h3>
                 <div style={{ display:'flex', flexDirection:'column', gap:'0.5rem' }}>
-                  {school.currentStatus === 'Documents Pending' && (
+                  {school.currentStatus === 'LOI Pending' && (
                     <Action icon="📄" text="Upload required documents" color="#9a3412" bg="#fff8f0" border="#fed7aa" />
                   )}
                   {completion < 100 && (

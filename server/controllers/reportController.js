@@ -170,7 +170,6 @@ const growthReport = async (req, res) => {
             month: { $month: '$createdAt' },
           },
           count:     { $sum: 1 },
-          approved:  { $sum: { $cond: [{ $eq: ['$currentStatus', 'Approved'] }, 1, 0] } },
           completed: { $sum: { $cond: [{ $eq: ['$currentStatus', 'Completed'] }, 1, 0] } },
           rejected:  { $sum: { $cond: [{ $eq: ['$currentStatus', 'Rejected'] }, 1, 0] } },
         },
@@ -200,7 +199,6 @@ const growthReport = async (req, res) => {
         'Year':      year,
         'Month':     MONTHS[month - 1],
         'Added':     m?.count     || 0,
-        'Approved':  m?.approved  || 0,
         'Completed': m?.completed || 0,
         'Rejected':  m?.rejected  || 0,
       });
@@ -237,7 +235,7 @@ const adminPerformanceReport = async (req, res) => {
       const [total, completed, pending, messages] = await Promise.all([
         School.countDocuments({ assignedAdmin: admin._id }),
         School.countDocuments({ assignedAdmin: admin._id, currentStatus: 'Completed' }),
-        School.countDocuments({ assignedAdmin: admin._id, currentStatus: { $in: ['Documents Pending', 'Verification'] } }),
+        School.countDocuments({ assignedAdmin: admin._id, currentStatus: { $in: ['LOI Pending', 'Verification'] } }),
         Message.countDocuments({ sender: admin._id }),
       ]);
 

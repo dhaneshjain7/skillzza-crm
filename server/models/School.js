@@ -5,10 +5,9 @@ const softDelete = require('./plugins/softDelete');
 const SCHOOL_STATUSES = [
   'New',
   'Contacted',
-  'Documents Pending',
-  'Documents Received',
+  'LOI Pending',
+  'LOI Received',
   'Verification',
-  'Approved',
   'Rejected',
   'Completed',
   'Archived',
@@ -82,8 +81,72 @@ const schoolSchema = new mongoose.Schema(
     tags:          [{ type: String, trim: true }],
     poeSubmitted:  { type: String, enum: ['Yes', 'No'], default: 'No' },
 
-    // ── CPT Training Level — set by Admin/SuperAdmin only, view-only for school ──
-    cptTrainingLevel: { type: String, enum: ['CPT1', 'CPT2', 'CPT3', 'CPT4', 'CPT5'] },
+    // ── CPD Training Level — set by Admin/SuperAdmin only, view-only for school ──
+    cpdTrainingLevel: { type: String, enum: ['CPD1', 'CPD2', 'CPD3', 'CPD4'] },
+
+    // ── Activity Tracking — set by Admin/SuperAdmin only, view-only for school ──
+    loiReceived:          { type: String, enum: ['Yes', 'No'], default: 'No' },
+    dcaisConfirmation:    { type: String, enum: ['Yes', 'No'], default: 'No' },
+    studentDataReceived:  { type: String, enum: ['Yes', 'No'], default: 'No' },
+    teachersDataReceived: { type: String, enum: ['Yes', 'No'], default: 'No' },
+    hackathonRegistered:  { type: String, enum: ['Yes', 'No'], default: 'No' },
+
+    // ── Teachers Activity — per-teacher CPD/DCAIS tracking, Admin/SuperAdmin only ──
+    teachersActivity: [
+      {
+        name: { type: String, trim: true },
+        cpdQuarterly: {
+          q1: { type: Boolean, default: false },
+          q2: { type: Boolean, default: false },
+          q3: { type: Boolean, default: false },
+          q4: { type: Boolean, default: false },
+        },
+        dcaisMonthly: {
+          jan: { type: Boolean, default: false },
+          feb: { type: Boolean, default: false },
+          mar: { type: Boolean, default: false },
+          apr: { type: Boolean, default: false },
+          may: { type: Boolean, default: false },
+          jun: { type: Boolean, default: false },
+          jul: { type: Boolean, default: false },
+          aug: { type: Boolean, default: false },
+          sep: { type: Boolean, default: false },
+          oct: { type: Boolean, default: false },
+          nov: { type: Boolean, default: false },
+          dec: { type: Boolean, default: false },
+        },
+        certificateReceived: { type: Boolean, default: false },
+      },
+    ],
+
+    // ── Students Activity — per-student MAU/DCAIS tracking, Admin/SuperAdmin only ──
+    studentsActivity: [
+      {
+        name: { type: String, trim: true },
+        mauQuarterly: {
+          q1: { type: Boolean, default: false },
+          q2: { type: Boolean, default: false },
+          q3: { type: Boolean, default: false },
+          q4: { type: Boolean, default: false },
+        },
+        dcaisMonthly: {
+          jan: { type: Boolean, default: false },
+          feb: { type: Boolean, default: false },
+          mar: { type: Boolean, default: false },
+          apr: { type: Boolean, default: false },
+          may: { type: Boolean, default: false },
+          jun: { type: Boolean, default: false },
+          jul: { type: Boolean, default: false },
+          aug: { type: Boolean, default: false },
+          sep: { type: Boolean, default: false },
+          oct: { type: Boolean, default: false },
+          nov: { type: Boolean, default: false },
+          dec: { type: Boolean, default: false },
+        },
+        certificateReceived: { type: Boolean, default: false },
+        certificateLink:     { type: String, trim: true },
+      },
+    ],
   },
   { timestamps: true }
 );

@@ -1,5 +1,5 @@
 const { User, RefreshToken, ActivityLog, School, SchoolStatusHistory } = require('../models');
-const { sendTokens, generateAccessToken } = require('../utils/generateTokens');
+const { sendTokens, generateAccessToken, REFRESH_COOKIE_OPTIONS } = require('../utils/generateTokens');
 const { verifyGoogleToken } = require('../utils/googleAuth');
 const { notifyPasswordChanged } = require('../utils/notificationService');
 
@@ -140,11 +140,7 @@ const logout = async (req, res) => {
       });
     }
 
-    res.clearCookie('refreshToken', {
-      httpOnly: true,
-      secure:   process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-    });
+    res.clearCookie('refreshToken', REFRESH_COOKIE_OPTIONS);
 
     res.status(200).json({ success: true, message: 'Logged out successfully.' });
   } catch (err) {

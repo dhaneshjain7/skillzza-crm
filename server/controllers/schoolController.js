@@ -286,7 +286,7 @@ const updateSchool = async (req, res) => {
     // Optional enum selects arrive as '' when nothing is chosen — a value the
     // enum validator rejects. Treat '' as "clear this field" instead of failing.
     const unset = {};
-    ['schoolType', 'cptTrainingLevel'].forEach((f) => {
+    ['schoolType', 'cpdTrainingLevel'].forEach((f) => {
       if (req.body[f] === '') {
         delete req.body[f];
         if (school[f] !== undefined) unset[f] = 1;
@@ -656,6 +656,8 @@ const getStats = async (req, res) => {
       byStatus,
       recentSchools,
       totalAdmins,
+      hackathonParticipated,
+      dcaisReceived,
     ] = await Promise.all([
       School.countDocuments(filter),
       School.aggregate([
@@ -668,6 +670,8 @@ const getStats = async (req, res) => {
         .limit(5)
         .populate('assignedAdmin', 'name'),
       User.countDocuments({ role: 'admin', isDeleted: false }),
+      School.countDocuments({ ...filter, isDeleted: false, hackathonRegistered: 'Yes' }),
+      School.countDocuments({ ...filter, isDeleted: false, dcaisConfirmation: 'Yes' }),
     ]);
 
     // Format status counts into object
@@ -683,6 +687,8 @@ const getStats = async (req, res) => {
         statusCounts,
         recentSchools,
         totalAdmins,
+        hackathonParticipated,
+        dcaisReceived,
       },
     });
   } catch (err) {
