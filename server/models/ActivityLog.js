@@ -32,6 +32,7 @@ const activityLogSchema = new mongoose.Schema(
         'School Archived',
         'Profile Updated',
         'Password Changed',
+        'Password Reset Requested',
         'Admin Created',
         'Admin Deactivated',
         'Admin Assigned',

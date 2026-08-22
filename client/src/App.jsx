@@ -27,6 +27,8 @@ import AdminSchoolDetail      from './pages/admin/SchoolDetail';
 import SchoolDashboard       from './pages/school/Dashboard';
 import SchoolDocuments       from './pages/school/Documents';
 import SchoolMessages        from './pages/school/Messages';
+import SchoolActivity        from './pages/school/Activity';
+import SchoolProfile         from './pages/school/Profile';
 
 const RootRedirect = () => {
   const { isAuthenticated, user, isLoading } = useAuth();
@@ -73,6 +75,8 @@ const AppRoutes = () => (
       <Route path="/school/dashboard"  element={<SchoolDashboard />} />
       <Route path="/school/documents"  element={<SchoolDocuments />} />
       <Route path="/school/messages"   element={<SchoolMessages />} />
+      <Route path="/school/activity"   element={<SchoolActivity />} />
+      <Route path="/school/profile"    element={<SchoolProfile />} />
     </Route>
 
     {/* Shared */}

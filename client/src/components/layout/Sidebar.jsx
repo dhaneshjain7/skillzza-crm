@@ -1,6 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useState } from 'react';
+import logo from '../../assets/skillzza-logo.png';
 
 const NAV = {
   superadmin: [
@@ -22,6 +23,7 @@ const NAV = {
     { label: 'Dashboard',     path: '/school/dashboard',     icon: '▦' },
     { label: 'Documents',     path: '/school/documents',     icon: '◫' },
     { label: 'Messages',      path: '/school/messages',      icon: '◉' },
+    { label: 'Activity',      path: '/school/activity',      icon: '📌' },
     { label: 'Profile',       path: '/school/profile',       icon: '◈' },
   ],
 };
@@ -54,17 +56,30 @@ const Sidebar = ({ collapsed, onToggle }) => {
       boxShadow: '2px 0 12px rgba(0,0,0,0.15)',
     }}>
       {/* Logo */}
-      <div style={{ display:'flex', alignItems:'center', gap:'10px', padding:'0 14px', height:'64px', borderBottom:`1px solid rgba(255,255,255,0.08)`, flexShrink:0 }}>
-        <div style={{ width:'34px', height:'34px', background:'#fff', borderRadius:'8px', display:'flex', alignItems:'center', justifyContent:'center', color: theme.accent, fontWeight:'900', fontSize:'1.1rem', flexShrink:0 }}>S</div>
-        {!collapsed && (
-          <div style={{ overflow:'hidden' }}>
-            <div style={{ color:'#fff', fontWeight:'800', fontSize:'0.9rem', letterSpacing:'2px', whiteSpace:'nowrap' }}>SKILLZZA</div>
+      <div style={{
+        display:'flex', alignItems:'center',
+        flexDirection: collapsed ? 'column' : 'row',
+        justifyContent: collapsed ? 'center' : 'space-between',
+        padding: collapsed ? '10px 0' : '0 14px',
+        gap: collapsed ? '8px' : 0,
+        height: collapsed ? 'auto' : '64px',
+        borderBottom:`1px solid rgba(255,255,255,0.08)`, flexShrink:0,
+      }}>
+        {collapsed ? (
+          <div style={{ width:'48px', height:'48px', background:'#fff', borderRadius:'10px', overflow:'hidden', flexShrink:0 }}>
+            <img src={logo} alt="Skillzza" style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'left center' }} />
+          </div>
+        ) : (
+          <div style={{ overflow:'hidden', display:'flex', flexDirection:'column', justifyContent:'center', gap:'3px' }}>
+            <div style={{ background:'#fff', borderRadius:'8px', padding:'4px 10px', display:'inline-flex', alignItems:'center', width:'fit-content' }}>
+              <img src={logo} alt="Skillzza" style={{ height:'32px', width:'auto', maxWidth:'160px', objectFit:'contain', display:'block' }} />
+            </div>
             <div style={{ color:'rgba(255,255,255,0.4)', fontSize:'0.58rem', letterSpacing:'0.08em', textTransform:'uppercase', whiteSpace:'nowrap' }}>{role.replace('_',' ')}</div>
           </div>
         )}
         <button
           onClick={onToggle}
-          style={{ marginLeft:'auto', background:'rgba(255,255,255,0.08)', border:'none', color:'rgba(255,255,255,0.6)', cursor:'pointer', width:'24px', height:'24px', borderRadius:'4px', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.7rem', flexShrink:0, fontFamily:'monospace' }}
+          style={{ background:'rgba(255,255,255,0.08)', border:'none', color:'rgba(255,255,255,0.6)', cursor:'pointer', width:'24px', height:'24px', borderRadius:'4px', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.7rem', flexShrink:0, fontFamily:'monospace' }}
         >
           {collapsed ? '»' : '«'}
         </button>

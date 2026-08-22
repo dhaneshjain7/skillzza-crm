@@ -7,11 +7,11 @@ import StatusBadge from '../../components/common/StatusBadge';
 import API from '../../api/axios';
 
 const DOC_TYPE_LABELS = {
-  school_approval:        'School Approval',
+  school_approval:        'LOI',
   student_data:           'Student Data',
   teacher_data:           'Teacher Data',
-  adobe_student_accounts: 'Adobe Student Accounts',
-  adobe_teacher_accounts: 'Adobe Teacher Accounts',
+  adobe_student_accounts: 'Adobe Student IDs',
+  adobe_teacher_accounts: 'Adobe Teacher IDs',
   'Registration Certificate': 'Registration Certificate',
   'Affiliation Certificate':  'Affiliation Certificate',
   Other:                  'Other',
@@ -72,10 +72,10 @@ const AdminDashboard = () => {
 
   const STATS = [
     { label:'Assigned Schools', value: total,              icon:'🏫', color:'#1a3a5c', bg:'#dbeafe', sub:'Total assigned to you' },
-    { label:'LOI Pending',      value: sc['LOI Pending']||0, icon:'📄', color:'#9a3412', bg:'#ffedd5', sub:'Waiting for documents' },
+    { label:'LOI Received',     value: sc['LOI Received']||0, icon:'📄', color:'#15803d', bg:'#dcfce7', sub:'Schools that submitted LOI' },
+    { label:'DCAIS Participated', value: stats?.dcaisReceived||0, icon:'📑', color:'#0e7490', bg:'#cffafe', sub:'Schools that participated in DCAIS' },
     { label:'Completed',        value: sc['Completed']||0, icon:'✅', color:'#065f46', bg:'#d1fae5', sub:'Successfully closed' },
     { label:'Hackathon Participated', value: stats?.hackathonParticipated||0, icon:'🏆', color:'#6d28d9', bg:'#ede9fe', sub:'Schools that took part' },
-    { label:'DCAIS Received',  value: stats?.dcaisReceived||0, icon:'📑', color:'#0e7490', bg:'#cffafe', sub:'DCAIS confirmations received' },
   ];
 
   return (

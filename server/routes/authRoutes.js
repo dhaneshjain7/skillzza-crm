@@ -7,6 +7,8 @@ const {
   logout,
   getMe,
   changePassword,
+  forgotPassword,
+  resetPassword,
   registerSchool,
   googleAuthSchool,
 } = require('../controllers/authController');
@@ -18,6 +20,8 @@ router.post('/login',          login);            // POST /api/auth/login
 router.post('/refresh',        refreshToken);      // POST /api/auth/refresh
 router.post('/register/school', registerSchool);   // POST /api/auth/register/school
 router.post('/google/school',  googleAuthSchool);  // POST /api/auth/google/school
+router.post('/forgot-password', forgotPassword);   // POST /api/auth/forgot-password
+router.post('/reset-password',  resetPassword);    // POST /api/auth/reset-password
 
 // ── Protected routes ──────────────────────────────────────────────────────────
 router.post('/logout',          protect, logout);          // POST /api/auth/logout

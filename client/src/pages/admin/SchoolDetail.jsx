@@ -5,8 +5,9 @@ import Layout from '../../components/layout/Layout';
 import StatusBadge from '../../components/common/StatusBadge';
 import API from '../../api/axios';
 import { exportPDF, exportExcel, exportWord, exportCSV } from '../../utils/exportReport';
+import { downloadStudentsActivityTemplate, downloadTeachersActivityTemplate } from '../../utils/downloadFile';
 
-const STATUSES = ['New','Contacted','LOI Pending','LOI Received','Verification','Rejected','Completed','Archived'];
+const STATUSES = ['New','Contacted','LOI Pending','LOI Received','Verification','Data Requested','Data Received','Completed'];
 
 const TABS = [
   { key: 'overview',  label: '📋 Overview' },
@@ -22,10 +23,11 @@ const TABS = [
 
 const ACTIVITY_FIELDS = [
   { name: 'loiReceived',          label: 'LOI Received' },
-  { name: 'dcaisConfirmation',    label: 'DCAIS Received' },
+  { name: 'dcaisConfirmation',    label: 'DCAIS Participated' },
   { name: 'studentDataReceived',  label: 'Student Data Received' },
   { name: 'teachersDataReceived', label: 'Teachers Data Received' },
   { name: 'hackathonRegistered',  label: 'Hackathon Participated' },
+  { name: 'poeSubmitted',         label: 'POE Recived' },
 ];
 
 const QUARTERS = ['q1', 'q2', 'q3', 'q4'];
@@ -42,15 +44,21 @@ const EXPORT_FORMATS = [
 
 const blankTeacher = () => ({
   name: '',
+  fiscalYear: '',
   cpdQuarterly: { q1: false, q2: false, q3: false, q4: false },
   dcaisMonthly: { jan:false,feb:false,mar:false,apr:false,may:false,jun:false,jul:false,aug:false,sep:false,oct:false,nov:false,dec:false },
   certificateReceived: false,
+  certificateLink: '',
 });
 
 const blankStudent = () => ({
   name: '',
+  class: '',
+  section: '',
+  fiscalYear: '',
   mauQuarterly: { q1: false, q2: false, q3: false, q4: false },
   dcaisMonthly: { jan:false,feb:false,mar:false,apr:false,may:false,jun:false,jul:false,aug:false,sep:false,oct:false,nov:false,dec:false },
+  hackathonParticipated: false,
   certificateReceived: false,
   certificateLink: '',
 });
@@ -92,6 +100,8 @@ const SchoolDetail = () => {
   const [savingTeachers, setSavingTeachers] = useState(false);
   const [teacherExportOpen, setTeacherExportOpen] = useState(false);
   const teacherExportRef = useRef(null);
+  const [importingTeachers, setImportingTeachers] = useState(false);
+  const teacherImportRef = useRef(null);
 
   // Close teacher export dropdown on outside click
   useEffect(() => {
@@ -107,6 +117,8 @@ const SchoolDetail = () => {
   const [savingStudents, setSavingStudents] = useState(false);
   const [studentExportOpen, setStudentExportOpen] = useState(false);
   const studentExportRef = useRef(null);
+  const [importingStudents, setImportingStudents] = useState(false);
+  const studentImportRef = useRef(null);
 
   // Close student export dropdown on outside click
   useEffect(() => {
@@ -209,7 +221,6 @@ const SchoolDetail = () => {
   const initForm = (s) => {
     setForm({
       schoolName:         s.schoolName         || '',
-      registrationNumber: s.registrationNumber || '',
       udiseCode:          s.udiseCode          || '',
       email:              s.email              || '',
       phone:              s.phone              || '',
@@ -217,7 +228,6 @@ const SchoolDetail = () => {
       website:            s.website            || '',
       board:              s.board              || '',
       schoolType:         s.schoolType         || '',
-      establishedYear:    s.establishedYear    || '',
       studentCount:       s.studentCount       || '',
       staffCount:         s.staffCount         || '',
       'address.street':   s.address?.street    || '',
@@ -231,7 +241,6 @@ const SchoolDetail = () => {
       'management.name':  s.management?.name   || '',
       'management.designation': s.management?.designation || '',
       'management.phone': s.management?.phone  || '',
-      poeSubmitted:        s.poeSubmitted       || 'No',
       cpdTrainingLevel:    s.cpdTrainingLevel   || '',
     });
   };
@@ -243,6 +252,7 @@ const SchoolDetail = () => {
       studentDataReceived:  s.studentDataReceived  || 'No',
       teachersDataReceived: s.teachersDataReceived || 'No',
       hackathonRegistered:  s.hackathonRegistered  || 'No',
+      poeSubmitted:         s.poeSubmitted         || 'No',
     });
   };
 
@@ -250,14 +260,20 @@ const SchoolDetail = () => {
     setTeachers((s.teachersActivity || []).map(t => ({
       _id: t._id,
       name: t.name || '',
+      fiscalYear: t.fiscalYear || '',
       cpdQuarterly: { ...blankTeacher().cpdQuarterly, ...t.cpdQuarterly },
       dcaisMonthly: { ...blankTeacher().dcaisMonthly, ...t.dcaisMonthly },
       certificateReceived: !!t.certificateReceived,
+      certificateLink: t.certificateLink || '',
     })));
   };
 
   const addTeacherRow    = () => setTeachers(prev => [...prev, blankTeacher()]);
-  const removeTeacherRow = (idx) => setTeachers(prev => prev.filter((_, i) => i !== idx));
+  const removeTeacherRow = (idx) => {
+    if (!window.confirm('Remove this teacher\'s record?')) return;
+    if (!window.confirm('Are you sure? This cannot be undone once you save.')) return;
+    setTeachers(prev => prev.filter((_, i) => i !== idx));
+  };
 
   const updateTeacherField = (idx, path, value) => {
     setTeachers(prev => prev.map((t, i) => {
@@ -274,15 +290,23 @@ const SchoolDetail = () => {
     setStudents((s.studentsActivity || []).map(t => ({
       _id: t._id,
       name: t.name || '',
+      class: t.class || '',
+      section: t.section || '',
+      fiscalYear: t.fiscalYear || '',
       mauQuarterly: { ...blankStudent().mauQuarterly, ...t.mauQuarterly },
       dcaisMonthly: { ...blankStudent().dcaisMonthly, ...t.dcaisMonthly },
+      hackathonParticipated: !!t.hackathonParticipated,
       certificateReceived: !!t.certificateReceived,
       certificateLink: t.certificateLink || '',
     })));
   };
 
   const addStudentRow    = () => setStudents(prev => [...prev, blankStudent()]);
-  const removeStudentRow = (idx) => setStudents(prev => prev.filter((_, i) => i !== idx));
+  const removeStudentRow = (idx) => {
+    if (!window.confirm('Remove this student\'s record?')) return;
+    if (!window.confirm('Are you sure? This cannot be undone once you save.')) return;
+    setStudents(prev => prev.filter((_, i) => i !== idx));
+  };
 
   const updateStudentField = (idx, path, value) => {
     setStudents(prev => prev.map((t, i) => {
@@ -307,7 +331,6 @@ const SchoolDetail = () => {
     try {
       const payload = {
         schoolName:         form.schoolName,
-        registrationNumber: form.registrationNumber,
         udiseCode:          form.udiseCode,
         email:              form.email,
         phone:              form.phone,
@@ -315,7 +338,6 @@ const SchoolDetail = () => {
         website:            form.website,
         board:              form.board,
         schoolType:         form.schoolType,
-        establishedYear:    form.establishedYear ? Number(form.establishedYear) : undefined,
         studentCount:       form.studentCount    ? Number(form.studentCount)    : undefined,
         staffCount:         form.staffCount      ? Number(form.staffCount)      : undefined,
         address: {
@@ -335,7 +357,6 @@ const SchoolDetail = () => {
           designation: form['management.designation'],
           phone:       form['management.phone'],
         },
-        poeSubmitted: form.poeSubmitted,
         cpdTrainingLevel: form.cpdTrainingLevel,
       };
       const res = await API.put(`/schools/${schoolId}`, payload);
@@ -382,12 +403,39 @@ const SchoolDetail = () => {
     }
   };
 
+  // ── Bulk import teachers activity from Excel/CSV ───────────────────────────
+  const handleTeachersBulkImport = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+
+    const form = new FormData();
+    form.append('file', file);
+
+    setImportingTeachers(true);
+    try {
+      const res = await API.post(`/schools/${schoolId}/teachers-activity/import`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setSchool(res.data.school);
+      initTeachersForm(res.data.school);
+      const skippedMsg = res.data.skipped > 0 ? ` (${res.data.skipped} row(s) skipped — see console)` : '';
+      if (res.data.skipped > 0) console.warn('Import errors:', res.data.errors);
+      showMsg(`✅ Imported ${res.data.added} teacher(s)${skippedMsg}`);
+    } catch (e) {
+      showMsg('❌ ' + (e.response?.data?.message || 'Import failed'));
+    } finally {
+      setImportingTeachers(false);
+    }
+  };
+
   // ── Export teachers activity ──────────────────────────────────────────────
   const buildTeacherExportRows = () => teachers.map(t => {
-    const row = { 'Teacher Name': t.name || '—' };
+    const row = { 'Teacher Name': t.name || '—', 'Fiscal Year': t.fiscalYear || '—' };
     QUARTERS.forEach(q => { row[`CPD ${QUARTER_LABELS[q]}`] = t.cpdQuarterly[q] ? 'Yes' : 'No'; });
     MONTHS.forEach(m => { row[`DCAIS ${MONTH_LABELS[m]}`] = t.dcaisMonthly[m] ? 'Yes' : 'No'; });
     row['Certificate Received'] = t.certificateReceived ? 'Yes' : 'No';
+    row['Certificate Link'] = t.certificateLink || '—';
     return row;
   });
 
@@ -419,11 +467,38 @@ const SchoolDetail = () => {
     }
   };
 
+  // ── Bulk import students activity from Excel/CSV ──────────────────────────
+  const handleStudentsBulkImport = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+
+    const form = new FormData();
+    form.append('file', file);
+
+    setImportingStudents(true);
+    try {
+      const res = await API.post(`/schools/${schoolId}/students-activity/import`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setSchool(res.data.school);
+      initStudentsForm(res.data.school);
+      const skippedMsg = res.data.skipped > 0 ? ` (${res.data.skipped} row(s) skipped — see console)` : '';
+      if (res.data.skipped > 0) console.warn('Import errors:', res.data.errors);
+      showMsg(`✅ Imported ${res.data.added} student(s)${skippedMsg}`);
+    } catch (e) {
+      showMsg('❌ ' + (e.response?.data?.message || 'Import failed'));
+    } finally {
+      setImportingStudents(false);
+    }
+  };
+
   // ── Export students activity ──────────────────────────────────────────────
   const buildStudentExportRows = () => students.map(t => {
-    const row = { 'Student Name': t.name || '—' };
+    const row = { 'Student Name': t.name || '—', 'Class': t.class || '—', 'Section': t.section || '—', 'Fiscal Year': t.fiscalYear || '—' };
     QUARTERS.forEach(q => { row[`MAU ${QUARTER_LABELS[q]}`] = t.mauQuarterly[q] ? 'Yes' : 'No'; });
     MONTHS.forEach(m => { row[`DCAIS ${MONTH_LABELS[m]}`] = t.dcaisMonthly[m] ? 'Yes' : 'No'; });
+    row['Annual Hackathon Participated'] = t.hackathonParticipated ? 'Yes' : 'No';
     row['Certificate Received'] = t.certificateReceived ? 'Yes' : 'No';
     row['Certificate Link'] = t.certificateLink || '—';
     return row;
@@ -502,7 +577,7 @@ const SchoolDetail = () => {
           <div style={{ flex:1, minWidth:0 }}>
             <h2 style={{ margin:'0 0 0.25rem', fontSize:'1.3rem', fontWeight:'800' }}>{school.schoolName}</h2>
             <div style={{ fontSize:'0.82rem', color:'rgba(255,255,255,0.7)', marginBottom:'0.5rem' }}>
-              {[school.registrationNumber && `Reg: ${school.registrationNumber}`, school.board, school.schoolType, school.address?.city, school.address?.state].filter(Boolean).join(' · ')}
+              {[school.board, school.schoolType, school.address?.city, school.address?.state].filter(Boolean).join(' · ')}
             </div>
             <div style={{ display:'flex', gap:'0.75rem', flexWrap:'wrap', alignItems:'center' }}>
               <StatusBadge status={school.currentStatus} size="lg" />
@@ -538,15 +613,13 @@ const SchoolDetail = () => {
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1.25rem' }}>
           <InfoCard title="Basic Details" items={[
             { label:'School Name',      value: school.schoolName },
-            { label:'Registration No.', value: school.registrationNumber || 'Not provided' },
             { label:'UDISE Code',       value: school.udiseCode || 'Not provided' },
             { label:'Board',            value: school.board || '—' },
             { label:'Type',             value: school.schoolType || '—' },
-            { label:'Est. Year',        value: school.establishedYear || '—' },
             { label:'Website',          value: school.website || '—' },
-            { label:'Students (6-12)',  value: school.studentCount || '—' },
-            { label:'Staff (6-12)',     value: school.staffCount || '—' },
-            { label:'POE Submitted',    value: school.poeSubmitted || 'No' },
+            { label:'Total Students(6-12)', value: school.studentCount || '—' },
+            { label:'Total Teachers (6-12)', value: school.staffCount || '—' },
+            { label:'POE Recived',      value: school.poeSubmitted || 'No' },
             { label:'CPD Training Level', value: school.cpdTrainingLevel || 'Not set' },
           ]} />
           <InfoCard title="Contact Details" items={[
@@ -703,7 +776,7 @@ const SchoolDetail = () => {
           <h3 style={{ margin:'0 0 1.25rem', fontSize:'1rem', fontWeight:'700', color:'#1e293b' }}>✏️ Edit School Profile</h3>
           <form onSubmit={handleSave}>
             <Section title="Basic Details">
-              <Row><Field label="School Name *"        name="schoolName"         value={form.schoolName}         onChange={handleChange} required /><Field label="Registration Number" name="registrationNumber" value={form.registrationNumber} onChange={handleChange} /></Row>
+              <Row><Field label="School Name *"        name="schoolName"         value={form.schoolName}         onChange={handleChange} required /><Field label="UDISE Code *" name="udiseCode" value={form.udiseCode} onChange={handleChange} required placeholder="11-digit UDISE code" /></Row>
               <Row><Field label="Email *"              name="email"              value={form.email}              onChange={handleChange} required type="email" /><Field label="Phone *" name="phone" value={form.phone} onChange={handleChange} required /></Row>
               <Row><Field label="UDISE Code *"         name="udiseCode"          value={form.udiseCode}          onChange={handleChange} required placeholder="11-digit UDISE code" /><Field label="Alt Phone" name="altPhone" value={form.altPhone} onChange={handleChange} /></Row>
               <Row><Field label="Website"              name="website"            value={form.website}            onChange={handleChange} /><div /></Row>
@@ -711,7 +784,7 @@ const SchoolDetail = () => {
                 <SelectField label="Board" name="board" value={form.board} onChange={handleChange} options={['CBSE','ICSE','IB','State Board','Other']} />
                 <SelectField label="School Type" name="schoolType" value={form.schoolType} onChange={handleChange} options={['Primary','Secondary','Higher Secondary','College','Other']} />
               </Row>
-              <Row><Field label="Established Year" name="establishedYear" value={form.establishedYear} onChange={handleChange} type="number" /><Field label="Student Count (6-12)" name="studentCount" value={form.studentCount} onChange={handleChange} type="number" /></Row>
+              <Row><Field label="Student Count (6-12)" name="studentCount" value={form.studentCount} onChange={handleChange} type="number" /><Field label="Staff Count (6-12)" name="staffCount" value={form.staffCount} onChange={handleChange} type="number" /></Row>
               <Row><Field label="Staff Count (6-12)" name="staffCount" value={form.staffCount} onChange={handleChange} type="number" /><div /></Row>
             </Section>
             <Section title="Address">
@@ -726,10 +799,6 @@ const SchoolDetail = () => {
             <Section title="Management Information">
               <Row><Field label="Management Name" name="management.name" value={form['management.name']} onChange={handleChange} /><Field label="Designation" name="management.designation" value={form['management.designation']} onChange={handleChange} /></Row>
               <Field label="Management Phone" name="management.phone" value={form['management.phone']} onChange={handleChange} fullWidth />
-              <Row>
-                <SelectField label="POE Submitted" name="poeSubmitted" value={form.poeSubmitted} onChange={handleChange} options={['Yes','No']} />
-                <div />
-              </Row>
             </Section>
             <Section title="CPD Training Level">
               <Row>
@@ -765,10 +834,11 @@ const SchoolDetail = () => {
               ))}
             </Row>
             <Row>
-              <SelectField label={ACTIVITY_FIELDS[4].label} name={ACTIVITY_FIELDS[4].name} value={activityForm[ACTIVITY_FIELDS[4].name]}
-                onChange={e => setActivityForm(a => ({ ...a, [ACTIVITY_FIELDS[4].name]: e.target.value }))}
-                options={['Yes', 'No']} />
-              <div />
+              {ACTIVITY_FIELDS.slice(4, 6).map(f => (
+                <SelectField key={f.name} label={f.label} name={f.name} value={activityForm[f.name]}
+                  onChange={e => setActivityForm(a => ({ ...a, [f.name]: e.target.value }))}
+                  options={['Yes', 'No']} />
+              ))}
             </Row>
             <div style={{ display:'flex', gap:'0.75rem', justifyContent:'flex-end', paddingTop:'1rem', borderTop:'1px solid #f1f5f9' }}>
               <button type="submit" disabled={savingActivity} style={{ ...saveBtn, opacity: savingActivity ? 0.7 : 1 }}>
@@ -789,9 +859,11 @@ const SchoolDetail = () => {
                 <thead>
                   <tr>
                     <th rowSpan={2} style={th}>Teacher Name</th>
+                    <th rowSpan={2} style={th}>Fiscal Year</th>
                     <th colSpan={4} style={th}>CPD Training Quarterly</th>
-                    <th colSpan={12} style={th}>DCAIS Monthly</th>
+                    <th colSpan={12} style={th}>Monthly Activity (DCAIS)</th>
                     <th rowSpan={2} style={th}>Certificate Received</th>
+                    <th rowSpan={2} style={th}>Certificate Link</th>
                     <th rowSpan={2} style={{ ...th, width:'40px' }}></th>
                   </tr>
                   <tr>
@@ -801,13 +873,18 @@ const SchoolDetail = () => {
                 </thead>
                 <tbody>
                   {teachers.length === 0 ? (
-                    <tr><td colSpan={19} style={{ ...td, textAlign:'center', color:'#94a3b8', padding:'1.5rem' }}>No teachers added yet</td></tr>
+                    <tr><td colSpan={21} style={{ ...td, textAlign:'center', color:'#94a3b8', padding:'1.5rem' }}>No teachers added yet</td></tr>
                   ) : teachers.map((t, i) => (
                     <tr key={t._id || i}>
                       <td style={td}>
                         <input type="text" value={t.name} placeholder="Teacher name"
                           onChange={e => updateTeacherField(i, 'name', e.target.value)}
                           style={{ ...inputStyle, width:'160px', boxSizing:'border-box' }} />
+                      </td>
+                      <td style={td}>
+                        <input type="text" value={t.fiscalYear} placeholder="e.g. 2025-26"
+                          onChange={e => updateTeacherField(i, 'fiscalYear', e.target.value)}
+                          style={{ ...inputStyle, width:'100px', boxSizing:'border-box' }} />
                       </td>
                       {QUARTERS.map(q => (
                         <td key={q} style={{ ...td, textAlign:'center' }}>
@@ -825,6 +902,11 @@ const SchoolDetail = () => {
                         <input type="checkbox" checked={!!t.certificateReceived}
                           onChange={e => updateTeacherField(i, 'certificateReceived', e.target.checked)} />
                       </td>
+                      <td style={td}>
+                        <input type="text" value={t.certificateLink} placeholder="https://..."
+                          onChange={e => updateTeacherField(i, 'certificateLink', e.target.value)}
+                          style={{ ...inputStyle, width:'160px', boxSizing:'border-box' }} />
+                      </td>
                       <td style={{ ...td, textAlign:'center' }}>
                         <button type="button" onClick={() => removeTeacherRow(i)}
                           style={{ background:'none', border:'none', color:'#991b1b', cursor:'pointer', fontSize:'0.9rem', fontFamily:'inherit' }}>✕</button>
@@ -834,10 +916,21 @@ const SchoolDetail = () => {
                 </tbody>
               </table>
             </div>
-            <button type="button" onClick={addTeacherRow}
-              style={{ padding:'0.5rem 1rem', background:'#f1f5f9', border:'none', borderRadius:'7px', cursor:'pointer', fontSize:'0.8rem', fontWeight:'600', color:'#475569', fontFamily:'inherit', marginBottom:'1rem' }}>
-              + Add Teacher
-            </button>
+            <div style={{ display:'flex', gap:'0.75rem', flexWrap:'wrap', marginBottom:'1rem' }}>
+              <button type="button" onClick={addTeacherRow}
+                style={{ padding:'0.5rem 1rem', background:'#f1f5f9', border:'none', borderRadius:'7px', cursor:'pointer', fontSize:'0.8rem', fontWeight:'600', color:'#475569', fontFamily:'inherit' }}>
+                + Add Teacher
+              </button>
+              <button type="button" onClick={() => downloadTeachersActivityTemplate()}
+                style={{ padding:'0.5rem 1rem', background:'#f1f5f9', border:'none', borderRadius:'7px', cursor:'pointer', fontSize:'0.8rem', fontWeight:'600', color:'#475569', fontFamily:'inherit' }}>
+                ⬇ Sample Template
+              </button>
+              <button type="button" disabled={importingTeachers} onClick={() => teacherImportRef.current?.click()}
+                style={{ padding:'0.5rem 1rem', background:'#e8f0f9', border:'none', borderRadius:'7px', cursor: importingTeachers ? 'default' : 'pointer', fontSize:'0.8rem', fontWeight:'600', color:'#1e3a5f', fontFamily:'inherit', opacity: importingTeachers ? 0.7 : 1 }}>
+                {importingTeachers ? 'Importing...' : '⬆ Bulk Import (Excel/CSV)'}
+              </button>
+              <input ref={teacherImportRef} type="file" accept=".csv,.xls,.xlsx" onChange={handleTeachersBulkImport} style={{ display:'none' }} />
+            </div>
             <div style={{ display:'flex', gap:'0.75rem', justifyContent:'flex-end', alignItems:'center', paddingTop:'1rem', borderTop:'1px solid #f1f5f9' }}>
               <div ref={teacherExportRef} style={{ position:'relative' }}>
                 <button type="button" onClick={() => setTeacherExportOpen(o => !o)}
@@ -875,8 +968,12 @@ const SchoolDetail = () => {
                 <thead>
                   <tr>
                     <th rowSpan={2} style={th}>Student Name</th>
-                    <th colSpan={4} style={th}>MAU Quarterly</th>
-                    <th colSpan={12} style={th}>DCAIS Monthly</th>
+                    <th rowSpan={2} style={th}>Class</th>
+                    <th rowSpan={2} style={th}>Section</th>
+                    <th rowSpan={2} style={th}>Fiscal Year</th>
+                    <th colSpan={4} style={th}>Quaterly Activity (MAU)</th>
+                    <th colSpan={12} style={th}>Monthly Activity (DCAIS)</th>
+                    <th rowSpan={2} style={th}>Annual Hackathon Participated</th>
                     <th rowSpan={2} style={th}>Certificate Received</th>
                     <th rowSpan={2} style={th}>Certificate Link</th>
                     <th rowSpan={2} style={{ ...th, width:'40px' }}></th>
@@ -888,13 +985,28 @@ const SchoolDetail = () => {
                 </thead>
                 <tbody>
                   {students.length === 0 ? (
-                    <tr><td colSpan={20} style={{ ...td, textAlign:'center', color:'#94a3b8', padding:'1.5rem' }}>No students added yet</td></tr>
+                    <tr><td colSpan={24} style={{ ...td, textAlign:'center', color:'#94a3b8', padding:'1.5rem' }}>No students added yet</td></tr>
                   ) : students.map((t, i) => (
                     <tr key={t._id || i}>
                       <td style={td}>
                         <input type="text" value={t.name} placeholder="Student name"
                           onChange={e => updateStudentField(i, 'name', e.target.value)}
                           style={{ ...inputStyle, width:'160px', boxSizing:'border-box' }} />
+                      </td>
+                      <td style={td}>
+                        <input type="text" value={t.class} placeholder="Class"
+                          onChange={e => updateStudentField(i, 'class', e.target.value)}
+                          style={{ ...inputStyle, width:'80px', boxSizing:'border-box' }} />
+                      </td>
+                      <td style={td}>
+                        <input type="text" value={t.section} placeholder="Section"
+                          onChange={e => updateStudentField(i, 'section', e.target.value)}
+                          style={{ ...inputStyle, width:'80px', boxSizing:'border-box' }} />
+                      </td>
+                      <td style={td}>
+                        <input type="text" value={t.fiscalYear} placeholder="e.g. 2025-26"
+                          onChange={e => updateStudentField(i, 'fiscalYear', e.target.value)}
+                          style={{ ...inputStyle, width:'100px', boxSizing:'border-box' }} />
                       </td>
                       {QUARTERS.map(q => (
                         <td key={q} style={{ ...td, textAlign:'center' }}>
@@ -908,6 +1020,10 @@ const SchoolDetail = () => {
                             onChange={e => updateStudentField(i, `dcaisMonthly.${m}`, e.target.checked)} />
                         </td>
                       ))}
+                      <td style={{ ...td, textAlign:'center' }}>
+                        <input type="checkbox" checked={!!t.hackathonParticipated}
+                          onChange={e => updateStudentField(i, 'hackathonParticipated', e.target.checked)} />
+                      </td>
                       <td style={{ ...td, textAlign:'center' }}>
                         <input type="checkbox" checked={!!t.certificateReceived}
                           onChange={e => updateStudentField(i, 'certificateReceived', e.target.checked)} />
@@ -926,10 +1042,21 @@ const SchoolDetail = () => {
                 </tbody>
               </table>
             </div>
-            <button type="button" onClick={addStudentRow}
-              style={{ padding:'0.5rem 1rem', background:'#f1f5f9', border:'none', borderRadius:'7px', cursor:'pointer', fontSize:'0.8rem', fontWeight:'600', color:'#475569', fontFamily:'inherit', marginBottom:'1rem' }}>
-              + Add Student
-            </button>
+            <div style={{ display:'flex', gap:'0.75rem', flexWrap:'wrap', marginBottom:'1rem' }}>
+              <button type="button" onClick={addStudentRow}
+                style={{ padding:'0.5rem 1rem', background:'#f1f5f9', border:'none', borderRadius:'7px', cursor:'pointer', fontSize:'0.8rem', fontWeight:'600', color:'#475569', fontFamily:'inherit' }}>
+                + Add Student
+              </button>
+              <button type="button" onClick={() => downloadStudentsActivityTemplate()}
+                style={{ padding:'0.5rem 1rem', background:'#f1f5f9', border:'none', borderRadius:'7px', cursor:'pointer', fontSize:'0.8rem', fontWeight:'600', color:'#475569', fontFamily:'inherit' }}>
+                ⬇ Sample Template
+              </button>
+              <button type="button" disabled={importingStudents} onClick={() => studentImportRef.current?.click()}
+                style={{ padding:'0.5rem 1rem', background:'#e8f0f9', border:'none', borderRadius:'7px', cursor: importingStudents ? 'default' : 'pointer', fontSize:'0.8rem', fontWeight:'600', color:'#1e3a5f', fontFamily:'inherit', opacity: importingStudents ? 0.7 : 1 }}>
+                {importingStudents ? 'Importing...' : '⬆ Bulk Import (Excel/CSV)'}
+              </button>
+              <input ref={studentImportRef} type="file" accept=".csv,.xls,.xlsx" onChange={handleStudentsBulkImport} style={{ display:'none' }} />
+            </div>
             <div style={{ display:'flex', gap:'0.75rem', justifyContent:'flex-end', alignItems:'center', paddingTop:'1rem', borderTop:'1px solid #f1f5f9' }}>
               <div ref={studentExportRef} style={{ position:'relative' }}>
                 <button type="button" onClick={() => setStudentExportOpen(o => !o)}

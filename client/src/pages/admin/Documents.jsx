@@ -12,16 +12,16 @@ const STATUS_STYLE = {
 };
 
 const DOC_TYPE_LABELS = {
-  school_approval:        'School Approval',
+  school_approval:        'LOI',
   student_data:           'Student Data',
   teacher_data:           'Teacher Data',
-  adobe_student_accounts: 'Adobe Student Accounts',
-  adobe_teacher_accounts: 'Adobe Teacher Accounts',
+  adobe_student_accounts: 'Adobe Student IDs',
+  adobe_teacher_accounts: 'Adobe Teacher IDs',
 };
 
 const SEND_TYPES = [
-  { key: 'adobe_student_accounts', label: 'Adobe Student Accounts', icon: '🎓', desc: 'Name, ID, PW, School Name, Class Section, UDISE Code, City, State' },
-  { key: 'adobe_teacher_accounts', label: 'Adobe Teacher Accounts', icon: '👩‍🏫', desc: 'Name, ID, PW, School Name, UDISE Code, City, State' },
+  { key: 'adobe_student_accounts', label: 'Adobe Student IDs', icon: '🎓', desc: 'Name, ID, PW, School Name, Class Section, UDISE Code, City, State' },
+  { key: 'adobe_teacher_accounts', label: 'Adobe Teacher IDs', icon: '👩‍🏫', desc: 'Name, ID, PW, School Name, UDISE Code, City, State' },
 ];
 
 const AdminDocuments = () => {

@@ -287,6 +287,35 @@ const getDocumentTypes = (req, res) => {
   res.status(200).json({ success: true, types });
 };
 
+// ── @GET /api/documents/template/:documentType ────────────────────────────────
+// Blank .xlsx with just the required column headers, ready for a school to fill in
+const downloadTemplate = (req, res) => {
+  try {
+    const { documentType } = req.params;
+    const schema = SCHEMAS[documentType];
+    if (!schema) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid document type. Valid types: ${Object.keys(SCHEMAS).join(', ')}`,
+      });
+    }
+
+    const XLSX = require('xlsx');
+    const ws = XLSX.utils.aoa_to_sheet([schema.required]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Template');
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    const fileName = `${schema.label.replace(/[^a-z0-9]+/gi, '_')}_Template.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(buffer);
+  } catch (err) {
+    console.error('downloadTemplate error:', err);
+    res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
 module.exports = {
   uploadDocument,
   validateDocument,
@@ -295,4 +324,5 @@ module.exports = {
   downloadDocument,
   reviewDocument,
   getDocumentTypes,
+  downloadTemplate,
 };

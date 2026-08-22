@@ -235,7 +235,7 @@ const adminPerformanceReport = async (req, res) => {
       const [total, completed, pending, messages] = await Promise.all([
         School.countDocuments({ assignedAdmin: admin._id }),
         School.countDocuments({ assignedAdmin: admin._id, currentStatus: 'Completed' }),
-        School.countDocuments({ assignedAdmin: admin._id, currentStatus: { $in: ['LOI Pending', 'Verification'] } }),
+        School.countDocuments({ assignedAdmin: admin._id, currentStatus: { $in: ['LOI Pending', 'Verification', 'Data Requested', 'Data Received'] } }),
         Message.countDocuments({ sender: admin._id }),
       ]);
 

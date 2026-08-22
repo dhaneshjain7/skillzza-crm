@@ -42,7 +42,7 @@ const getAdmins = async (req, res) => {
       const [totalSchools, completed, pending] = await Promise.all([
         School.countDocuments({ assignedAdmin: admin._id }),
         School.countDocuments({ assignedAdmin: admin._id, currentStatus: 'Completed' }),
-        School.countDocuments({ assignedAdmin: admin._id, currentStatus: { $in: ['LOI Pending', 'Verification'] } }),
+        School.countDocuments({ assignedAdmin: admin._id, currentStatus: { $in: ['LOI Pending', 'Verification', 'Data Requested', 'Data Received'] } }),
       ]);
       return {
         ...admin.toObject(),

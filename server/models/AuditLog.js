@@ -22,6 +22,8 @@ const auditLogSchema = new mongoose.Schema(
         'Admin Changed',
         'Message Sent',
         'Archived',
+        'Students Activity Imported',
+        'Teachers Activity Imported',
       ],
       required: true,
     },

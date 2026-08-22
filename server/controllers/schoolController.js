@@ -1,5 +1,7 @@
+const fs = require('fs');
 const { School, SchoolStatusHistory, AuditLog, ActivityLog, User } = require('../models');
 const { notifyStatusUpdate, notifyAdminAssigned, notifyPasswordChanged } = require('../utils/notificationService');
+const { parseFile, validateAgainstSchema, STUDENTS_ACTIVITY_SCHEMA, TEACHERS_ACTIVITY_SCHEMA, SCHOOLS_BULK_SCHEMA } = require('../utils/fileParser');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -48,8 +50,8 @@ const createSchool = async (req, res) => {
     const {
       schoolName, email, phone, address,
       principal, management, schoolType,
-      board, establishedYear, website,
-      registrationNumber, udiseCode, studentCount,
+      board, website,
+      udiseCode, studentCount,
       staffCount, tags, assignedAdmin,
       loginEmail, loginPassword,
     } = req.body;
@@ -95,11 +97,9 @@ const createSchool = async (req, res) => {
       address,
       principal,
       management,
-      schoolType,
+      schoolType: schoolType || undefined, // '' from an unselected <select> fails the enum validator
       board,
-      establishedYear,
       website,
-      registrationNumber,
       udiseCode,
       studentCount,
       staffCount,
@@ -169,6 +169,171 @@ const createSchool = async (req, res) => {
   }
 };
 
+// ── @GET /api/schools/bulk-template ─────────────────────────────────────────────
+// Blank .xlsx for bulk-creating many schools at once
+const downloadSchoolsBulkTemplate = (req, res) => {
+  try {
+    const XLSX = require('xlsx');
+    const ws = XLSX.utils.aoa_to_sheet([SCHOOLS_BULK_SCHEMA.columns]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Template');
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="Schools_Bulk_Template.xlsx"');
+    res.send(buffer);
+  } catch (err) {
+    console.error('downloadSchoolsBulkTemplate error:', err);
+    res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
+const randomPassword = () => {
+  // 10 chars, mixed case + digits — well above the 6-char minimum
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  let out = '';
+  for (let i = 0; i < 10; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  return out;
+};
+
+// ── @POST /api/schools/bulk-import ───────────────────────────────────────────────
+// Create many schools at once from a CSV/XLS/XLSX file. Each school gets a portal
+// login where the login email is the school's own email and the password is
+// randomly generated (shown once in the response — not recoverable afterwards).
+const importSchoolsBulk = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No file uploaded.' });
+    }
+
+    let parsed;
+    try {
+      parsed = await parseFile(req.file.path);
+    } catch (parseErr) {
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ success: false, message: `File parse error: ${parseErr.message}` });
+    }
+
+    const validation = validateAgainstSchema(parsed, SCHOOLS_BULK_SCHEMA);
+    fs.unlinkSync(req.file.path);
+
+    if (validation.missing?.length) {
+      return res.status(400).json({ success: false, message: validation.errors[0] });
+    }
+    if (validation.validRows === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No valid rows found in file.',
+        errors: validation.errors.slice(0, 20),
+      });
+    }
+
+    const created = [];
+    const skipped = [];
+
+    // Rows that failed per-row schema validation (missing required fields, bad UDISE/email
+    // format, etc.) never made it into validation.rows — surface them as skipped too, not silently.
+    validation.errors.forEach(msg => {
+      const m = msg.match(/^Row (\d+): (.+)$/);
+      skipped.push({ row: m ? Number(m[1]) : null, schoolName: '', reason: m ? m[2] : msg });
+    });
+
+    // Sequential, not parallel — duplicate-email checks must see earlier rows in this same batch.
+    for (let i = 0; i < validation.rows.length; i++) {
+      const r = validation.rows[i];
+      const rowNum = r.__rowNum;
+      const schoolName = (r['School Name'] || '').trim();
+      const email       = (r['Email'] || '').trim().toLowerCase();
+
+      try {
+        const existingSchool = await School.findOne({ email });
+        if (existingSchool) {
+          skipped.push({ row: rowNum, schoolName, reason: 'A school with this email already exists.' });
+          continue;
+        }
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
+          skipped.push({ row: rowNum, schoolName, reason: 'A user account with this email already exists.' });
+          continue;
+        }
+
+        const school = await School.create({
+          schoolName,
+          email,
+          phone:       (r['Phone'] || '').trim(),
+          altPhone:    (r['Alt Phone'] || '').trim(),
+          website:     (r['Website'] || '').trim(),
+          board:       (r['Board'] || '').trim(),
+          schoolType:  (r['School Type'] || '').trim() || undefined,
+          udiseCode:   (r['UDISE Code'] || '').trim(),
+          studentCount: r['Student Count'] ? Number(r['Student Count']) : undefined,
+          staffCount:   r['Staff Count']   ? Number(r['Staff Count'])   : undefined,
+          address: {
+            street:   (r['Street'] || '').trim(),
+            city:     (r['City'] || '').trim(),
+            district: (r['District'] || '').trim(),
+            state:    (r['State'] || '').trim(),
+            pincode:  (r['Pincode'] || '').trim(),
+          },
+          principal: {
+            name:  (r['Principal Name'] || '').trim(),
+            email: (r['Principal Email'] || '').trim(),
+            phone: (r['Principal Phone'] || '').trim(),
+          },
+          assignedAdmin: null,
+          currentStatus: 'New',
+        });
+
+        const password = randomPassword();
+        const schoolUser = await User.create({
+          name:     schoolName,
+          email,
+          password,
+          role:     'school_user',
+          phone:    (r['Phone'] || '').trim(),
+          isActive: true,
+        });
+        school.schoolUser = schoolUser._id;
+        await school.save();
+
+        await SchoolStatusHistory.create({
+          school:        school._id,
+          oldStatus:     null,
+          newStatus:     'New',
+          updatedBy:     req.user._id,
+          updatedByRole: req.user.role,
+          remarks:       'School created via bulk import',
+        });
+
+        await logAudit({
+          school:      school._id,
+          eventType:   'School Created',
+          performedBy: req.user,
+          description: `School "${schoolName}" created via bulk import`,
+          req,
+        });
+
+        created.push({ row: rowNum, schoolName, schoolId: school._id, loginEmail: email, password });
+      } catch (rowErr) {
+        skipped.push({ row: rowNum, schoolName, reason: rowErr.message || 'Failed to create school.' });
+      }
+    }
+
+    await logActivity({
+      user:        req.user,
+      action:      'School Created',
+      description: `Bulk-imported ${created.length} school(s) from ${req.file.originalname}${skipped.length ? ` (${skipped.length} skipped)` : ''}`,
+      req,
+    });
+
+    res.status(200).json({ success: true, created, skipped });
+  } catch (err) {
+    console.error('importSchoolsBulk error:', err);
+    if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    res.status(500).json({ success: false, message: 'Server error during import.' });
+  }
+};
+
 // ── @GET /api/schools ─────────────────────────────────────────────────────────
 // SuperAdmin — all schools | Admin — assigned schools only | School User — own school
 const getSchools = async (req, res) => {
@@ -179,6 +344,7 @@ const getSchools = async (req, res) => {
       city, state, district,
       sortBy = 'createdAt', order = 'desc',
       isArchived,
+      activity,
     } = req.query;
 
     const filter = {};
@@ -197,6 +363,25 @@ const getSchools = async (req, res) => {
     if (state)         filter['address.state']    = new RegExp(state, 'i');
     if (district)      filter['address.district'] = new RegExp(district, 'i');
 
+    // Activity filter — from the school's Activity tab (LOI Received, DCAIS Participated, etc.)
+    // `activity` is a comma-separated list of "field:value" pairs, e.g. "loiReceived:Yes,hackathonRegistered:No".
+    // Multiple values for the same field are OR'd ($in); different fields are AND'd (both must match).
+    const ACTIVITY_FIELDS = ['loiReceived', 'dcaisConfirmation', 'studentDataReceived', 'teachersDataReceived', 'hackathonRegistered', 'poeSubmitted'];
+    if (activity) {
+      const grouped = {};
+      activity.split(',').forEach(pair => {
+        const [field, value] = pair.split(':');
+        if (ACTIVITY_FIELDS.includes(field) && ['Yes', 'No'].includes(value)) {
+          grouped[field] = grouped[field] || new Set();
+          grouped[field].add(value);
+        }
+      });
+      Object.entries(grouped).forEach(([field, values]) => {
+        const arr = Array.from(values);
+        filter[field] = arr.length > 1 ? { $in: arr } : arr[0];
+      });
+    }
+
     // Archived filter
     if (isArchived === 'true')  filter.isArchived = true;
     else if (isArchived === 'false') filter.isArchived = false;
@@ -207,7 +392,6 @@ const getSchools = async (req, res) => {
         { schoolName:         new RegExp(search, 'i') },
         { email:              new RegExp(search, 'i') },
         { phone:              new RegExp(search, 'i') },
-        { registrationNumber: new RegExp(search, 'i') },
         { udiseCode:          new RegExp(search, 'i') },
         { 'address.city':     new RegExp(search, 'i') },
         { 'address.state':    new RegExp(search, 'i') },
@@ -276,8 +460,9 @@ const updateSchool = async (req, res) => {
 
     // School user can only update their own profile fields — not admin-only fields
     if (req.user.role === 'school_user') {
-      const allowedForSchool = ['schoolName', 'registrationNumber', 'udiseCode', 'email', 'phone', 'altPhone', 'website',
-        'address', 'principal', 'management', 'establishedYear', 'studentCount', 'staffCount', 'logo', 'poeSubmitted'];
+      const allowedForSchool = ['schoolName', 'udiseCode', 'email', 'phone', 'altPhone', 'website',
+        'address', 'principal', 'management', 'studentCount', 'staffCount', 'logo', 'poeSubmitted',
+        'board', 'schoolType', 'spoc', 'spocPhone', 'spocEmail'];
       Object.keys(req.body).forEach(key => {
         if (!allowedForSchool.includes(key)) delete req.body[key];
       });
@@ -333,6 +518,29 @@ const updateSchool = async (req, res) => {
       return res.status(400).json({ success: false, message: Object.values(err.errors).map(e => e.message).join(' ') });
     }
     res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
+// ── @POST /api/schools/:id/logo ───────────────────────────────────────────────
+// SuperAdmin + Admin + own School user — upload/replace the school logo
+const uploadLogo = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No logo file uploaded.' });
+    }
+
+    const school = await School.findById(req.params.id);
+    if (!school) {
+      return res.status(404).json({ success: false, message: 'School not found.' });
+    }
+
+    school.logo = `/uploads/logos/${req.file.filename}`;
+    await school.save();
+
+    res.status(200).json({ success: true, school });
+  } catch (err) {
+    console.error('uploadLogo error:', err);
+    res.status(500).json({ success: false, message: 'Server error while uploading logo.' });
   }
 };
 
@@ -654,6 +862,7 @@ const getStats = async (req, res) => {
     const [
       total,
       byStatus,
+      byState,
       recentSchools,
       totalAdmins,
       hackathonParticipated,
@@ -665,6 +874,10 @@ const getStats = async (req, res) => {
         { $group: { _id: '$currentStatus', count: { $sum: 1 } } },
         { $sort: { count: -1 } },
       ]),
+      School.aggregate([
+        { $match: { ...filter, isDeleted: false } },
+        { $group: { _id: '$address.state', count: { $sum: 1 } } },
+      ]),
       School.find(filter)
         .sort({ createdAt: -1 })
         .limit(5)
@@ -674,9 +887,18 @@ const getStats = async (req, res) => {
       School.countDocuments({ ...filter, isDeleted: false, dcaisConfirmation: 'Yes' }),
     ]);
 
-    // Format status counts into object
+    // Format status/state counts into objects
     const statusCounts = byStatus.reduce((acc, s) => {
       acc[s._id] = s.count;
+      return acc;
+    }, {});
+    // Normalise casing/whitespace so "Rajasthan" and "rajasthan" group together
+    const stateCounts = byState.reduce((acc, s) => {
+      const raw = (s._id || '').toString().trim().replace(/\s+/g, ' ');
+      const label = (!raw || raw.toLowerCase() === 'not set')
+        ? 'Not set'
+        : raw.replace(/\w\S*/g, w => w[0].toUpperCase() + w.slice(1).toLowerCase());
+      acc[label] = (acc[label] || 0) + s.count;
       return acc;
     }, {});
 
@@ -685,6 +907,7 @@ const getStats = async (req, res) => {
       stats: {
         total,
         statusCounts,
+        stateCounts,
         recentSchools,
         totalAdmins,
         hackathonParticipated,
@@ -781,11 +1004,229 @@ const createSchoolLogin = async (req, res) => {
   }
 };
 
+// ── @GET /api/schools/students-activity/template ──────────────────────────────
+// Blank .xlsx with the bulk-import columns for Students Activity
+const downloadStudentsActivityTemplate = (req, res) => {
+  try {
+    const XLSX = require('xlsx');
+    const ws = XLSX.utils.aoa_to_sheet([STUDENTS_ACTIVITY_SCHEMA.columns]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Template');
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="Students_Activity_Template.xlsx"');
+    res.send(buffer);
+  } catch (err) {
+    console.error('downloadStudentsActivityTemplate error:', err);
+    res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
+// ── @POST /api/schools/:id/students-activity/import ───────────────────────────
+// Bulk-add students to a school's Students Activity from a CSV/XLS/XLSX file
+const importStudentsActivity = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No file uploaded.' });
+    }
+
+    const school = await School.findById(req.params.id);
+    if (!school) {
+      fs.unlinkSync(req.file.path);
+      return res.status(404).json({ success: false, message: 'School not found.' });
+    }
+
+    let parsed;
+    try {
+      parsed = await parseFile(req.file.path);
+    } catch (parseErr) {
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ success: false, message: `File parse error: ${parseErr.message}` });
+    }
+
+    const validation = validateAgainstSchema(parsed, STUDENTS_ACTIVITY_SCHEMA);
+    fs.unlinkSync(req.file.path);
+
+    if (validation.missing?.length) {
+      return res.status(400).json({ success: false, message: validation.errors[0] });
+    }
+    if (validation.validRows === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No valid rows found in file.',
+        errors: validation.errors.slice(0, 20),
+      });
+    }
+
+    const toBool = (v) => ['yes', 'y', 'true', '1'].includes(String(v ?? '').trim().toLowerCase());
+
+    const newStudents = validation.rows.map(r => ({
+      name:       r['Student Name'] || '',
+      class:      r['Class']        || '',
+      section:    r['Section']      || '',
+      fiscalYear: r['Fiscal Year']  || '',
+      mauQuarterly: {
+        q1: toBool(r['MAU Q1']), q2: toBool(r['MAU Q2']), q3: toBool(r['MAU Q3']), q4: toBool(r['MAU Q4']),
+      },
+      dcaisMonthly: {
+        jan: toBool(r['DCAIS Jan']), feb: toBool(r['DCAIS Feb']), mar: toBool(r['DCAIS Mar']), apr: toBool(r['DCAIS Apr']),
+        may: toBool(r['DCAIS May']), jun: toBool(r['DCAIS Jun']), jul: toBool(r['DCAIS Jul']), aug: toBool(r['DCAIS Aug']),
+        sep: toBool(r['DCAIS Sep']), oct: toBool(r['DCAIS Oct']), nov: toBool(r['DCAIS Nov']), dec: toBool(r['DCAIS Dec']),
+      },
+      hackathonParticipated: toBool(r['Annual Hackathon Participated']),
+      certificateReceived:   toBool(r['Certificate Received']),
+      certificateLink:       r['Certificate Link'] || '',
+    }));
+
+    school.studentsActivity.push(...newStudents);
+    await school.save();
+
+    await AuditLog.create({
+      school:          school._id,
+      eventType:       'Students Activity Imported',
+      performedBy:     req.user._id,
+      performedByRole: req.user.role,
+      description:     `Bulk-imported ${newStudents.length} student(s) from ${req.file.originalname}`,
+      ipAddress:       req.ip,
+    });
+
+    await logActivity({
+      user:          req.user,
+      action:        'Students Activity Imported',
+      description:   `Imported ${newStudents.length} student(s) into Students Activity for: ${school.schoolName}`,
+      relatedSchool: school._id,
+      req,
+    });
+
+    res.status(200).json({
+      success: true,
+      added:   newStudents.length,
+      skipped: validation.errors.length,
+      errors:  validation.errors.slice(0, 20),
+      school,
+    });
+  } catch (err) {
+    console.error('importStudentsActivity error:', err);
+    if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    res.status(500).json({ success: false, message: 'Server error during import.' });
+  }
+};
+
+// ── @GET /api/schools/teachers-activity/template ───────────────────────────────
+// Blank .xlsx with the bulk-import columns for Teachers Activity
+const downloadTeachersActivityTemplate = (req, res) => {
+  try {
+    const XLSX = require('xlsx');
+    const ws = XLSX.utils.aoa_to_sheet([TEACHERS_ACTIVITY_SCHEMA.columns]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Template');
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="Teachers_Activity_Template.xlsx"');
+    res.send(buffer);
+  } catch (err) {
+    console.error('downloadTeachersActivityTemplate error:', err);
+    res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
+// ── @POST /api/schools/:id/teachers-activity/import ────────────────────────────
+// Bulk-add teachers to a school's Teachers Activity from a CSV/XLS/XLSX file
+const importTeachersActivity = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No file uploaded.' });
+    }
+
+    const school = await School.findById(req.params.id);
+    if (!school) {
+      fs.unlinkSync(req.file.path);
+      return res.status(404).json({ success: false, message: 'School not found.' });
+    }
+
+    let parsed;
+    try {
+      parsed = await parseFile(req.file.path);
+    } catch (parseErr) {
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ success: false, message: `File parse error: ${parseErr.message}` });
+    }
+
+    const validation = validateAgainstSchema(parsed, TEACHERS_ACTIVITY_SCHEMA);
+    fs.unlinkSync(req.file.path);
+
+    if (validation.missing?.length) {
+      return res.status(400).json({ success: false, message: validation.errors[0] });
+    }
+    if (validation.validRows === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No valid rows found in file.',
+        errors: validation.errors.slice(0, 20),
+      });
+    }
+
+    const toBool = (v) => ['yes', 'y', 'true', '1'].includes(String(v ?? '').trim().toLowerCase());
+
+    const newTeachers = validation.rows.map(r => ({
+      name:       r['Teacher Name'] || '',
+      fiscalYear: r['Fiscal Year']  || '',
+      cpdQuarterly: {
+        q1: toBool(r['CPD Q1']), q2: toBool(r['CPD Q2']), q3: toBool(r['CPD Q3']), q4: toBool(r['CPD Q4']),
+      },
+      dcaisMonthly: {
+        jan: toBool(r['DCAIS Jan']), feb: toBool(r['DCAIS Feb']), mar: toBool(r['DCAIS Mar']), apr: toBool(r['DCAIS Apr']),
+        may: toBool(r['DCAIS May']), jun: toBool(r['DCAIS Jun']), jul: toBool(r['DCAIS Jul']), aug: toBool(r['DCAIS Aug']),
+        sep: toBool(r['DCAIS Sep']), oct: toBool(r['DCAIS Oct']), nov: toBool(r['DCAIS Nov']), dec: toBool(r['DCAIS Dec']),
+      },
+      certificateReceived: toBool(r['Certificate Received']),
+      certificateLink:     r['Certificate Link'] || '',
+    }));
+
+    school.teachersActivity.push(...newTeachers);
+    await school.save();
+
+    await AuditLog.create({
+      school:          school._id,
+      eventType:       'Teachers Activity Imported',
+      performedBy:     req.user._id,
+      performedByRole: req.user.role,
+      description:     `Bulk-imported ${newTeachers.length} teacher(s) from ${req.file.originalname}`,
+      ipAddress:       req.ip,
+    });
+
+    await logActivity({
+      user:          req.user,
+      action:        'Teachers Activity Imported',
+      description:   `Imported ${newTeachers.length} teacher(s) into Teachers Activity for: ${school.schoolName}`,
+      relatedSchool: school._id,
+      req,
+    });
+
+    res.status(200).json({
+      success: true,
+      added:   newTeachers.length,
+      skipped: validation.errors.length,
+      errors:  validation.errors.slice(0, 20),
+      school,
+    });
+  } catch (err) {
+    console.error('importTeachersActivity error:', err);
+    if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    res.status(500).json({ success: false, message: 'Server error during import.' });
+  }
+};
+
 module.exports = {
   createSchool,
+  downloadSchoolsBulkTemplate,
+  importSchoolsBulk,
   getSchools,
   getSchoolById,
   updateSchool,
+  uploadLogo,
   updateSchoolStatus,
   assignAdmin,
   archiveSchool,
@@ -795,4 +1236,8 @@ module.exports = {
   getStats,
   resetSchoolPassword,
   createSchoolLogin,
+  downloadStudentsActivityTemplate,
+  importStudentsActivity,
+  downloadTeachersActivityTemplate,
+  importTeachersActivity,
 };

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import Layout from '../../components/layout/Layout';
-import StatusBadge from '../../components/common/StatusBadge';
+import StatusBadge, { ADMIN_LABELS } from '../../components/common/StatusBadge';
 import API from '../../api/axios';
 import { exportPDF, exportExcel, exportWord } from '../../utils/exportReport';
 
@@ -168,7 +168,7 @@ const SuperAdminReports = () => {
                 <>
                   <select value={filters.status} onChange={e => setFilters(f => ({ ...f, status: e.target.value }))} style={filterSelect}>
                     <option value="">All Statuses</option>
-                    {['New','Contacted','LOI Pending','LOI Received','Verification','Approved','Rejected','Completed','Archived'].map(s => <option key={s} value={s}>{s}</option>)}
+                    {['New','Contacted','LOI Pending','LOI Received','Verification','Data Requested','Data Received','Completed'].map(s => <option key={s} value={s}>{ADMIN_LABELS[s] || s}</option>)}
                   </select>
                   <input type="text" placeholder="State" value={filters.state} onChange={e => setFilters(f => ({ ...f, state: e.target.value }))} style={filterInput} />
                 </>

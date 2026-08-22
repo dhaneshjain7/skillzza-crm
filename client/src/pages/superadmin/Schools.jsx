@@ -1,11 +1,20 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../../components/layout/Layout';
-import StatusBadge from '../../components/common/StatusBadge';
+import StatusBadge, { ADMIN_LABELS } from '../../components/common/StatusBadge';
 import API from '../../api/axios';
 import AddSchoolModal from '../../components/school/AddSchoolModal';
 
-const STATUSES = ['','New','Contacted','LOI Pending','LOI Received','Verification','Rejected','Completed','Archived'];
+const STATUSES = ['','New','Contacted','LOI Pending','LOI Received','Verification','Data Requested','Data Received','Completed'];
+
+const ACTIVITY_FIELDS = [
+  { value: 'loiReceived',           label: 'LOI Received' },
+  { value: 'dcaisConfirmation',     label: 'DCAIS Participated' },
+  { value: 'studentDataReceived',   label: 'Student Data Received' },
+  { value: 'teachersDataReceived',  label: 'Teachers Data Received' },
+  { value: 'hackathonRegistered',   label: 'Hackathon Participated' },
+  { value: 'poeSubmitted',          label: 'POE Recived' },
+];
 
 const SchoolsPage = ({ role = 'superadmin' }) => {
   const navigate        = useNavigate();
@@ -16,9 +25,34 @@ const SchoolsPage = ({ role = 'superadmin' }) => {
   const [search,  setSearch]      = useState('');
   const [searchIn,setSearchIn]    = useState('');
   const [status,  setStatus]      = useState('');
+  const [activityChecks, setActivityChecks] = useState({}); // { fieldName: ['Yes'] | ['No'] | ['Yes','No'] }
+  const [activityOpen, setActivityOpen] = useState(false);
+  const activityRef = useRef(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const limit = 10;
   const accent = role === 'superadmin' ? '#1e3a5f' : '#1a3a5c';
+
+  const activityCount = Object.values(activityChecks).reduce((n, arr) => n + arr.length, 0);
+
+  const toggleActivityCheck = (field, value) => {
+    setActivityChecks(prev => {
+      const current = new Set(prev[field] || []);
+      if (current.has(value)) current.delete(value); else current.add(value);
+      const next = { ...prev };
+      if (current.size === 0) delete next[field]; else next[field] = Array.from(current);
+      return next;
+    });
+    setPage(1);
+  };
+
+  // Close activity dropdown on outside click
+  useEffect(() => {
+    const onClick = (e) => {
+      if (activityRef.current && !activityRef.current.contains(e.target)) setActivityOpen(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
 
   const fetchSchools = useCallback(async () => {
     setLoading(true);
@@ -26,6 +60,10 @@ const SchoolsPage = ({ role = 'superadmin' }) => {
       const p = new URLSearchParams({ page, limit, sortBy:'createdAt', order:'desc' });
       if (search) p.set('search', search);
       if (status) p.set('status', status);
+      const activityParam = Object.entries(activityChecks)
+        .flatMap(([field, values]) => values.map(v => `${field}:${v}`))
+        .join(',');
+      if (activityParam) p.set('activity', activityParam);
       const res = await API.get(`/schools?${p}`);
       setSchools(res.data.schools);
       setTotal(res.data.total);
@@ -34,7 +72,7 @@ const SchoolsPage = ({ role = 'superadmin' }) => {
     } finally {
       setLoading(false);
     }
-  }, [page, search, status]);
+  }, [page, search, status, activityChecks]);
 
   useEffect(() => { fetchSchools(); }, [fetchSchools]);
 
@@ -68,8 +106,41 @@ const SchoolsPage = ({ role = 'superadmin' }) => {
         </form>
         <select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}
           style={{ padding:'0.55rem 0.875rem', border:'1.5px solid #e2e8f0', borderRadius:'8px', fontSize:'0.875rem', outline:'none', background:'#fff', fontFamily:'inherit', minWidth:'160px' }}>
-          {STATUSES.map(s => <option key={s} value={s}>{s || 'All Statuses'}</option>)}
+          {STATUSES.map(s => <option key={s} value={s}>{s ? (ADMIN_LABELS[s] || s) : 'All Statuses'}</option>)}
         </select>
+        <div ref={activityRef} style={{ position:'relative' }}>
+          <button type="button" onClick={() => setActivityOpen(o => !o)}
+            style={{ padding:'0.55rem 0.875rem', border:'1.5px solid #e2e8f0', borderRadius:'8px', fontSize:'0.875rem', outline:'none', background:'#fff', fontFamily:'inherit', minWidth:'170px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between', gap:'8px', color: activityCount ? '#1e293b' : '#64748b' }}>
+            <span>Activity{activityCount > 0 ? ` (${activityCount})` : '...'}</span>
+            <span style={{ fontSize:'0.6rem' }}>▼</span>
+          </button>
+          {activityOpen && (
+            <div style={{ position:'absolute', top:'calc(100% + 4px)', left:0, background:'#fff', border:'1px solid #e2e8f0', borderRadius:'10px', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', zIndex:50, minWidth:'270px', padding:'0.6rem', maxHeight:'340px', overflowY:'auto' }}>
+              {ACTIVITY_FIELDS.map(f => {
+                const checked = activityChecks[f.value] || [];
+                return (
+                  <div key={f.value} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.4rem 0.3rem', borderBottom:'1px solid #f8fafc' }}>
+                    <span style={{ fontSize:'0.8rem', color:'#374151', fontWeight:'500' }}>{f.label}</span>
+                    <div style={{ display:'flex', gap:'12px' }}>
+                      <label style={{ display:'flex', alignItems:'center', gap:'4px', fontSize:'0.75rem', color:'#475569', cursor:'pointer' }}>
+                        <input type="checkbox" checked={checked.includes('Yes')} onChange={() => toggleActivityCheck(f.value, 'Yes')} /> Yes
+                      </label>
+                      <label style={{ display:'flex', alignItems:'center', gap:'4px', fontSize:'0.75rem', color:'#475569', cursor:'pointer' }}>
+                        <input type="checkbox" checked={checked.includes('No')} onChange={() => toggleActivityCheck(f.value, 'No')} /> No
+                      </label>
+                    </div>
+                  </div>
+                );
+              })}
+              {activityCount > 0 && (
+                <button type="button" onClick={() => { setActivityChecks({}); setPage(1); }}
+                  style={{ marginTop:'0.5rem', width:'100%', padding:'0.4rem', background:'#f1f5f9', border:'none', borderRadius:'6px', fontSize:'0.75rem', color:'#64748b', cursor:'pointer', fontFamily:'inherit', fontWeight:'600' }}>
+                  Clear all
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Table */}
@@ -107,7 +178,6 @@ const SchoolsPage = ({ role = 'superadmin' }) => {
                         </div>
                         <div>
                           <div style={{ fontSize:'0.85rem', fontWeight:'600', color:'#1e293b' }}>{school.schoolName}</div>
-                          <div style={{ fontSize:'0.7rem', color:'#94a3b8' }}>{school.registrationNumber || 'No reg. no.'}</div>
                         </div>
                       </div>
                     </td>

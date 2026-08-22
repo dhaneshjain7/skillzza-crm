@@ -1,15 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
-import downloadFile from '../../utils/downloadFile';
+import downloadFile, { downloadTemplate } from '../../utils/downloadFile';
 import Layout from '../../components/layout/Layout';
 import API from '../../api/axios';
 
 const DOC_TYPES = [
-  { key: 'school_approval',        label: 'School Approval',         icon: '🏫', desc: 'SL NO, School Name, City/District, State, UDISE Code, Board (CBSE/ICSE/IB/SB), Student Count (6-12), Teacher Count (6-12), SPOC Name, SPOC Mobile, SPOC Email' },
+  { key: 'school_approval',        label: 'LOI',                     icon: '🏫', desc: 'SL NO, School Name, City/District, State, UDISE Code, Board (CBSE/ICSE/IB/SB), Student Count (6-12), Teacher Count (6-12), SPOC Name, SPOC Mobile, SPOC Email' },
   { key: 'student_data',           label: 'Student Data',            icon: '🎓', desc: 'First Name, Last Name, Grade, Section, School Name, City/State, UDISE Code' },
-  { key: 'teacher_data',           label: 'Teacher Data',            icon: '👩‍🏫', desc: 'First Name, Last Name, School Name, School City, UDISE Code' },
-  { key: 'adobe_student_accounts', label: 'Adobe Student Accounts',  icon: '💻', desc: 'Name, ID, PW, School Name, Class Section, UDISE Code, City, State' },
-  { key: 'adobe_teacher_accounts', label: 'Adobe Teacher Accounts',  icon: '💻', desc: 'Name, ID, PW, School Name, UDISE Code, City, State' },
+  { key: 'teacher_data',           label: 'Teacher Data',            icon: '👩‍🏫', desc: 'First Name, Last Name, Email ID, School Name, School City, UDISE Code' },
+  { key: 'adobe_student_accounts', label: 'Adobe Student IDs',       icon: '💻', desc: 'Name, ID, PW, School Name, Class Section, UDISE Code, City, State' },
+  { key: 'adobe_teacher_accounts', label: 'Adobe Teacher IDs',       icon: '💻', desc: 'Name, ID, PW, School Name, UDISE Code, City, State' },
 ];
+
+// School-side uploads are disabled for these — admin manages Adobe ID accounts directly.
+const NO_UPLOAD_TYPES = ['adobe_student_accounts', 'adobe_teacher_accounts'];
 
 const STATUS_STYLE = {
   'Pending':            { bg: '#fef9c3', color: '#854d0e' },
@@ -143,44 +146,55 @@ const SchoolDocuments = () => {
         <div style={{ flex: 1, minWidth: '300px' }}>
 
           {/* Upload Card */}
-          <div style={{ ...card, marginBottom: '1.25rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-              <div>
-                <div style={sectionTitle}>{currentType?.icon} Upload {currentType?.label}</div>
-                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
-                  Required columns: <span style={{ fontWeight: '600', color: '#1e293b' }}>{currentType?.desc}</span>
+          {!NO_UPLOAD_TYPES.includes(selected) && (
+            <div style={{ ...card, marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+                <div>
+                  <div style={sectionTitle}>{currentType?.icon} Upload {currentType?.label}</div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
+                    Required columns: <span style={{ fontWeight: '600', color: '#1e293b' }}>{currentType?.desc}</span>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem', flexShrink: 0 }}>
+                  <span style={{ fontSize: '0.7rem', color: '#94a3b8', background: '#f8fafc', padding: '3px 8px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>CSV · XLS · XLSX</span>
+                  <button
+                    type="button"
+                    onClick={() => downloadTemplate(selected, `${currentType?.label || 'Template'}.xlsx`)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: '600', color: '#1e3a5f', background: '#e8f0f9', border: '1px solid #cfe0f3', borderRadius: '6px', padding: '4px 10px', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                  >
+                    ⬇ Sample Template
+                  </button>
                 </div>
               </div>
-              <span style={{ fontSize: '0.7rem', color: '#94a3b8', background: '#f8fafc', padding: '3px 8px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>CSV · XLS · XLSX</span>
+
+              {error && (
+                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '0.75rem', fontSize: '0.82rem', color: '#dc2626', marginBottom: '1rem' }}>
+                  ⚠ {error}
+                </div>
+              )}
+
+              {stage === 'done' ? (
+                <div style={{ background: '#d1fae5', border: '1px solid #6ee7b7', borderRadius: '10px', padding: '1.25rem', textAlign: 'center' }}>
+                  <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>✅</div>
+                  <div style={{ fontWeight: '700', color: '#065f46', fontSize: '0.9rem' }}>File uploaded successfully!</div>
+                </div>
+              ) : stage === 'preview' && validation ? (
+                <ValidationPreview
+                  validation={validation}
+                  fileName={pendingFile?.name}
+                  onConfirm={handleConfirmUpload}
+                  onCancel={handleCancel}
+                  uploading={uploading}
+                />
+              ) : (
+                <DropZone fileRef={fileRef} onChange={handleFileChange} uploading={uploading} />
+              )}
             </div>
-
-            {error && (
-              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '0.75rem', fontSize: '0.82rem', color: '#dc2626', marginBottom: '1rem' }}>
-                ⚠ {error}
-              </div>
-            )}
-
-            {stage === 'done' ? (
-              <div style={{ background: '#d1fae5', border: '1px solid #6ee7b7', borderRadius: '10px', padding: '1.25rem', textAlign: 'center' }}>
-                <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>✅</div>
-                <div style={{ fontWeight: '700', color: '#065f46', fontSize: '0.9rem' }}>File uploaded successfully!</div>
-              </div>
-            ) : stage === 'preview' && validation ? (
-              <ValidationPreview
-                validation={validation}
-                fileName={pendingFile?.name}
-                onConfirm={handleConfirmUpload}
-                onCancel={handleCancel}
-                uploading={uploading}
-              />
-            ) : (
-              <DropZone fileRef={fileRef} onChange={handleFileChange} uploading={uploading} />
-            )}
-          </div>
+          )}
 
           {/* Upload History */}
           <div style={card}>
-            <div style={sectionTitle}>Upload History — {currentType?.label}</div>
+            <div style={sectionTitle}>Document History — {currentType?.label}</div>
             {loading ? (
               <div style={emptyStyle}>Loading...</div>
             ) : currentDocs.length === 0 ? (

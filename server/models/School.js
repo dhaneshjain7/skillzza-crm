@@ -8,6 +8,8 @@ const SCHOOL_STATUSES = [
   'LOI Pending',
   'LOI Received',
   'Verification',
+  'Data Requested',
+  'Data Received',
   'Rejected',
   'Completed',
   'Archived',
@@ -17,13 +19,14 @@ const schoolSchema = new mongoose.Schema(
   {
     // ── Basic Details ──────────────────────────────────────────────────────────
     schoolName:        { type: String, required: true, trim: true },
-    registrationNumber:{ type: String, trim: true },
     udiseCode:         { type: String, required: true, trim: true },   // 11-digit UDISE code — searchable
     schoolType:        { type: String, enum: ['Primary', 'Secondary', 'Higher Secondary', 'College', 'Other'] },
     board:             { type: String, trim: true },   // CBSE, ICSE, State, etc.
-    establishedYear:   { type: Number },
     website:           { type: String, trim: true },
     logo:              { type: String, default: null },
+    spoc:              { type: String, trim: true },   // School SPOC (single point of contact)
+    spocPhone:         { type: String, trim: true },
+    spocEmail:         { type: String, trim: true },
 
     // ── Contact Details ────────────────────────────────────────────────────────
     email:   { type: String, required: true, lowercase: true, trim: true },
@@ -95,35 +98,8 @@ const schoolSchema = new mongoose.Schema(
     teachersActivity: [
       {
         name: { type: String, trim: true },
+        fiscalYear: { type: String, trim: true },
         cpdQuarterly: {
-          q1: { type: Boolean, default: false },
-          q2: { type: Boolean, default: false },
-          q3: { type: Boolean, default: false },
-          q4: { type: Boolean, default: false },
-        },
-        dcaisMonthly: {
-          jan: { type: Boolean, default: false },
-          feb: { type: Boolean, default: false },
-          mar: { type: Boolean, default: false },
-          apr: { type: Boolean, default: false },
-          may: { type: Boolean, default: false },
-          jun: { type: Boolean, default: false },
-          jul: { type: Boolean, default: false },
-          aug: { type: Boolean, default: false },
-          sep: { type: Boolean, default: false },
-          oct: { type: Boolean, default: false },
-          nov: { type: Boolean, default: false },
-          dec: { type: Boolean, default: false },
-        },
-        certificateReceived: { type: Boolean, default: false },
-      },
-    ],
-
-    // ── Students Activity — per-student MAU/DCAIS tracking, Admin/SuperAdmin only ──
-    studentsActivity: [
-      {
-        name: { type: String, trim: true },
-        mauQuarterly: {
           q1: { type: Boolean, default: false },
           q2: { type: Boolean, default: false },
           q3: { type: Boolean, default: false },
@@ -147,12 +123,45 @@ const schoolSchema = new mongoose.Schema(
         certificateLink:     { type: String, trim: true },
       },
     ],
+
+    // ── Students Activity — per-student MAU/DCAIS tracking, Admin/SuperAdmin only ──
+    studentsActivity: [
+      {
+        name:    { type: String, trim: true },
+        class:   { type: String, trim: true },
+        section: { type: String, trim: true },
+        fiscalYear: { type: String, trim: true },
+        mauQuarterly: {
+          q1: { type: Boolean, default: false },
+          q2: { type: Boolean, default: false },
+          q3: { type: Boolean, default: false },
+          q4: { type: Boolean, default: false },
+        },
+        dcaisMonthly: {
+          jan: { type: Boolean, default: false },
+          feb: { type: Boolean, default: false },
+          mar: { type: Boolean, default: false },
+          apr: { type: Boolean, default: false },
+          may: { type: Boolean, default: false },
+          jun: { type: Boolean, default: false },
+          jul: { type: Boolean, default: false },
+          aug: { type: Boolean, default: false },
+          sep: { type: Boolean, default: false },
+          oct: { type: Boolean, default: false },
+          nov: { type: Boolean, default: false },
+          dec: { type: Boolean, default: false },
+        },
+        hackathonParticipated: { type: Boolean, default: false },
+        certificateReceived: { type: Boolean, default: false },
+        certificateLink:     { type: String, trim: true },
+      },
+    ],
   },
   { timestamps: true }
 );
 
 // Indexes for search module
-schoolSchema.index({ schoolName: 'text', email: 'text', registrationNumber: 'text' });
+schoolSchema.index({ schoolName: 'text', email: 'text' });
 schoolSchema.index({ currentStatus: 1 });
 schoolSchema.index({ udiseCode: 1 });
 schoolSchema.index({ assignedAdmin: 1 });

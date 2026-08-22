@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import API from '../../api/axios';
+import { downloadSchoolsBulkTemplate } from '../../utils/downloadFile';
 
 const AddSchoolModal = ({ onClose, onCreated }) => {
+  const [mode, setMode] = useState('single'); // 'single' | 'bulk'
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState('');
   const [form, setForm] = useState({
-    schoolName: '', registrationNumber: '', udiseCode: '', email: '', phone: '', altPhone: '', website: '',
-    board: '', schoolType: '', establishedYear: '', studentCount: '', staffCount: '',
+    schoolName: '', udiseCode: '', email: '', phone: '', altPhone: '', website: '',
+    board: '', schoolType: '', studentCount: '', staffCount: '',
     'address.street': '', 'address.city': '', 'address.district': '', 'address.state': '', 'address.pincode': '',
     'principal.name': '', 'principal.email': '', 'principal.phone': '',
   });
@@ -16,7 +18,39 @@ const AddSchoolModal = ({ onClose, onCreated }) => {
   const [showPassword, setShowPassword]   = useState(false);
   const [successInfo, setSuccessInfo]     = useState(null);
 
+  // ── Bulk import state ──────────────────────────────────────────────────────
+  const [bulkFile, setBulkFile]           = useState(null);
+  const [bulkImporting, setBulkImporting] = useState(false);
+  const [bulkError, setBulkError]         = useState('');
+  const [bulkResult, setBulkResult]       = useState(null); // { created, skipped }
+  const bulkFileRef = useRef(null);
+
   const handleChange = (e) => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
+
+  const handleBulkFileChange = (e) => {
+    setBulkFile(e.target.files?.[0] || null);
+    setBulkError('');
+  };
+
+  const handleBulkImport = async () => {
+    if (!bulkFile) { setBulkError('Choose a filled-in template file first.'); return; }
+    setBulkError('');
+    setBulkImporting(true);
+    try {
+      const form = new FormData();
+      form.append('file', bulkFile);
+      const res = await API.post('/schools/bulk-import', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setBulkResult({ created: res.data.created, skipped: res.data.skipped });
+      setBulkFile(null);
+      if (bulkFileRef.current) bulkFileRef.current.value = '';
+    } catch (err) {
+      setBulkError(err.response?.data?.message || 'Bulk import failed.');
+    } finally {
+      setBulkImporting(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -42,7 +76,6 @@ const AddSchoolModal = ({ onClose, onCreated }) => {
     try {
       const payload = {
         schoolName:         form.schoolName,
-        registrationNumber: form.registrationNumber,
         udiseCode:           form.udiseCode,
         email:               form.email,
         phone:               form.phone,
@@ -50,7 +83,6 @@ const AddSchoolModal = ({ onClose, onCreated }) => {
         website:             form.website,
         board:               form.board,
         schoolType:          form.schoolType,
-        establishedYear:     form.establishedYear ? Number(form.establishedYear) : undefined,
         studentCount:        form.studentCount    ? Number(form.studentCount)    : undefined,
         staffCount:          form.staffCount      ? Number(form.staffCount)      : undefined,
         address: {
@@ -121,6 +153,80 @@ const AddSchoolModal = ({ onClose, onCreated }) => {
     );
   }
 
+  // ── Bulk import results screen ────────────────────────────────────────────────
+  if (bulkResult) {
+    return (
+      <div style={overlay} onClick={() => { onCreated?.(); onClose(); }}>
+        <div style={{ ...modal, maxWidth: '620px' }} onClick={e => e.stopPropagation()}>
+          <div style={header}>
+            <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '800', color: '#1e293b' }}>Bulk Import Results</h3>
+            <button onClick={() => { onCreated?.(); onClose(); }} style={closeBtn}>✕</button>
+          </div>
+          <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1 }}>
+            <p style={{ fontSize: '0.85rem', color: '#374151', marginTop: 0 }}>
+              <strong style={{ color: '#065f46' }}>{bulkResult.created.length} school{bulkResult.created.length !== 1 ? 's' : ''} created</strong>
+              {bulkResult.skipped.length > 0 && <span style={{ color: '#991b1b' }}> · {bulkResult.skipped.length} row{bulkResult.skipped.length !== 1 ? 's' : ''} skipped</span>}
+            </p>
+
+            {bulkResult.created.length > 0 && (
+              <>
+                <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: '0 0 0.5rem' }}>
+                  ⚠️ These passwords won't be shown again — copy them now, or reset from each school's detail page later.
+                </p>
+                <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px', marginBottom: '1.25rem' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                    <thead>
+                      <tr style={{ background: '#f8fafc' }}>
+                        {['School', 'Login Email', 'Password'].map(h => (
+                          <th key={h} style={{ textAlign: 'left', padding: '0.5rem 0.75rem', fontWeight: '700', color: '#64748b', fontSize: '0.7rem', textTransform: 'uppercase', borderBottom: '1px solid #e2e8f0' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bulkResult.created.map(c => (
+                        <tr key={c.schoolId} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '0.5rem 0.75rem', color: '#1e293b', fontWeight: '600' }}>{c.schoolName}</td>
+                          <td style={{ padding: '0.5rem 0.75rem', color: '#374151' }}>{c.loginEmail}</td>
+                          <td style={{ padding: '0.5rem 0.75rem', color: '#374151', fontFamily: 'monospace' }}>{c.password}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+
+            {bulkResult.skipped.length > 0 && (
+              <div style={{ overflowX: 'auto', border: '1px solid #fecaca', borderRadius: '8px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                  <thead>
+                    <tr style={{ background: '#fef2f2' }}>
+                      {['Row', 'School', 'Reason skipped'].map(h => (
+                        <th key={h} style={{ textAlign: 'left', padding: '0.5rem 0.75rem', fontWeight: '700', color: '#991b1b', fontSize: '0.7rem', textTransform: 'uppercase', borderBottom: '1px solid #fecaca' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bulkResult.skipped.map((s, i) => (
+                      <tr key={i} style={{ borderBottom: '1px solid #fef2f2' }}>
+                        <td style={{ padding: '0.5rem 0.75rem', color: '#991b1b' }}>{s.row ?? '—'}</td>
+                        <td style={{ padding: '0.5rem 0.75rem', color: '#991b1b', fontWeight: '600' }}>{s.schoolName || '—'}</td>
+                        <td style={{ padding: '0.5rem 0.75rem', color: '#991b1b' }}>{s.reason}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+          <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end' }}>
+            <button onClick={() => { onCreated?.(); onClose(); }} style={saveBtn}>Done</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={overlay} onClick={onClose}>
       <div style={modal} onClick={e => e.stopPropagation()}>
@@ -131,6 +237,57 @@ const AddSchoolModal = ({ onClose, onCreated }) => {
           <button onClick={onClose} style={closeBtn}>✕</button>
         </div>
 
+        {/* Mode toggle */}
+        <div style={{ display: 'flex', gap: '0.5rem', padding: '0.875rem 1.5rem 0' }}>
+          <button type="button" onClick={() => setMode('single')}
+            style={{ ...modeTab, ...(mode === 'single' ? modeTabActive : {}) }}>
+            Single School
+          </button>
+          <button type="button" onClick={() => setMode('bulk')}
+            style={{ ...modeTab, ...(mode === 'bulk' ? modeTabActive : {}) }}>
+            ⬆ Bulk Import (Excel)
+          </button>
+        </div>
+
+        {mode === 'bulk' ? (
+          <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1 }}>
+            <p style={{ fontSize: '0.82rem', color: '#64748b', marginTop: 0 }}>
+              Download the template, fill in one row per school, then upload it here. Each school gets a portal login
+              where the <strong>login email is the school's own email</strong> and a <strong>random password</strong> is generated automatically.
+            </p>
+
+            <button type="button" onClick={() => downloadSchoolsBulkTemplate()}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '0.55rem 1rem', background: '#e8f0f9', border: '1px solid #cfe0f3', borderRadius: '8px', fontSize: '0.82rem', fontWeight: '600', color: '#1e3a5f', cursor: 'pointer', fontFamily: 'inherit', marginBottom: '1.25rem' }}>
+              ⬇ Download Template
+            </button>
+
+            {bulkError && (
+              <div style={{ marginBottom: '1rem', padding: '0.75rem 1rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', fontSize: '0.85rem', color: '#dc2626' }}>
+                ⚠ {bulkError}
+              </div>
+            )}
+
+            <label
+              style={{ display: 'block', border: `2px dashed ${bulkFile ? '#1e3a5f' : '#cbd5e1'}`, borderRadius: '10px', padding: '2rem', textAlign: 'center', cursor: 'pointer', background: bulkFile ? '#f0f6ff' : '#f8fafc' }}
+            >
+              <input ref={bulkFileRef} type="file" accept=".csv,.xls,.xlsx" onChange={handleBulkFileChange} style={{ display: 'none' }} disabled={bulkImporting} />
+              <div style={{ fontSize: '1.8rem', marginBottom: '0.5rem' }}>{bulkImporting ? '⏳' : '📂'}</div>
+              <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '0.88rem', marginBottom: '0.25rem' }}>
+                {bulkFile ? bulkFile.name : 'Click to browse or drag & drop the filled template'}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Supports CSV, XLS, XLSX · Max 10MB</div>
+            </label>
+
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', paddingTop: '1.25rem', marginTop: '0.5rem', borderTop: '1px solid #f1f5f9' }}>
+              <button type="button" onClick={onClose} style={cancelBtn}>Cancel</button>
+              <button type="button" onClick={handleBulkImport} disabled={bulkImporting || !bulkFile}
+                style={{ ...saveBtn, opacity: (bulkImporting || !bulkFile) ? 0.6 : 1, cursor: (bulkImporting || !bulkFile) ? 'not-allowed' : 'pointer' }}>
+                {bulkImporting ? 'Importing...' : '⬆ Import Schools'}
+              </button>
+            </div>
+          </div>
+        ) : (
+        <>
         {error && (
           <div style={{ margin: '1rem 1.5rem 0', padding: '0.75rem 1rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', fontSize: '0.85rem', color: '#dc2626' }}>
             ⚠ {error}
@@ -142,11 +299,7 @@ const AddSchoolModal = ({ onClose, onCreated }) => {
           <Section title="Basic Details">
             <Row>
               <Field label="School Name *" name="schoolName" value={form.schoolName} onChange={handleChange} required />
-              <Field label="Registration Number" name="registrationNumber" value={form.registrationNumber} onChange={handleChange} />
-            </Row>
-            <Row>
               <Field label="UDISE Code *" name="udiseCode" value={form.udiseCode} onChange={handleChange} required placeholder="11-digit UDISE code" />
-              <div />
             </Row>
             <Row>
               <Field label="Email *" name="email" value={form.email} onChange={handleChange} required type="email" />
@@ -161,12 +314,8 @@ const AddSchoolModal = ({ onClose, onCreated }) => {
               <SelectField label="School Type" name="schoolType" value={form.schoolType} onChange={handleChange} options={['Primary','Secondary','Higher Secondary','College','Other']} />
             </Row>
             <Row>
-              <Field label="Established Year" name="establishedYear" value={form.establishedYear} onChange={handleChange} type="number" />
               <Field label="Student Count (6-12)" name="studentCount" value={form.studentCount} onChange={handleChange} type="number" />
-            </Row>
-            <Row>
               <Field label="Staff Count (6-12)" name="staffCount" value={form.staffCount} onChange={handleChange} type="number" />
-              <div />
             </Row>
           </Section>
 
@@ -243,6 +392,8 @@ const AddSchoolModal = ({ onClose, onCreated }) => {
             </button>
           </div>
         </form>
+        </>
+        )}
       </div>
     </div>
   );
@@ -286,5 +437,7 @@ const header   = { display: 'flex', justifyContent: 'space-between', alignItems:
 const closeBtn = { background: '#f1f5f9', border: 'none', borderRadius: '8px', width: '32px', height: '32px', cursor: 'pointer', fontSize: '0.9rem', color: '#64748b' };
 const cancelBtn= { padding: '0.65rem 1.25rem', background: '#f1f5f9', border: 'none', borderRadius: '8px', cursor: 'pointer', fontFamily: 'inherit', fontWeight: '600', color: '#475569', fontSize: '0.875rem' };
 const saveBtn  = { padding: '0.65rem 1.75rem', background: '#1e3a5f', border: 'none', borderRadius: '8px', cursor: 'pointer', fontFamily: 'inherit', fontWeight: '700', color: '#fff', fontSize: '0.875rem' };
+const modeTab       = { padding: '0.5rem 1rem', background: '#f1f5f9', border: 'none', borderRadius: '8px 8px 0 0', cursor: 'pointer', fontFamily: 'inherit', fontWeight: '600', fontSize: '0.82rem', color: '#64748b' };
+const modeTabActive = { background: '#1e3a5f', color: '#fff' };
 
 export default AddSchoolModal;

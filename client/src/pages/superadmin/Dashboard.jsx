@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../../components/layout/Layout';
 import StatCard from '../../components/common/StatCard';
-import StatusBadge from '../../components/common/StatusBadge';
+import StatusBadge, { ADMIN_LABELS } from '../../components/common/StatusBadge';
 import API from '../../api/axios';
 
 // Mini bar chart using pure CSS/SVG
@@ -21,14 +21,8 @@ const BarChart = ({ data }) => {
   );
 };
 
-// Donut-style status distribution
-const StatusDonut = ({ counts, total }) => {
-  const STATUS_COLORS = {
-    'New':'#3b82f6','Contacted':'#f59e0b','LOI Pending':'#f97316',
-    'LOI Received':'#22c55e','Verification':'#8b5cf6',
-    'Rejected':'#ef4444','Completed':'#06b6d4','Archived':'#94a3b8',
-  };
-  const entries = Object.entries(counts).filter(([,v]) => v > 0);
+// Generic donut renderer — takes pre-built entries of { key, label, count, color }
+const Donut = ({ entries, total, centerLabel = 'SCHOOLS', legendMaxHeight }) => {
   if (entries.length === 0) return <div style={{ color:'#94a3b8', fontSize:'0.8rem', textAlign:'center', padding:'1rem' }}>No schools yet</div>;
 
   let cumulative = 0;
@@ -37,19 +31,19 @@ const StatusDonut = ({ counts, total }) => {
 
   return (
     <div style={{ display:'flex', alignItems:'center', gap:'1.5rem', flexWrap:'wrap' }}>
-      <svg width="120" height="120" viewBox="0 0 120 120">
+      <svg width="120" height="120" viewBox="0 0 120 120" style={{ flexShrink:0 }}>
         <circle cx={cx} cy={cy} r={radius} fill="none" stroke="#f1f5f9" strokeWidth={stroke} />
         {/* Rotate -90deg so slices start at 12 o'clock, then stack sequentially */}
         <g transform={`rotate(-90 ${cx} ${cy})`}>
-          {entries.map(([status, count]) => {
+          {entries.map(({ key, count, color }) => {
             const pct = count / total;
             const arcLength = pct * circumference;
             const dasharray  = `${arcLength} ${circumference - arcLength}`;
             const dashoffset = -(cumulative * circumference);
             cumulative += pct;
             return (
-              <circle key={status} cx={cx} cy={cy} r={radius} fill="none"
-                stroke={STATUS_COLORS[status] || '#94a3b8'} strokeWidth={stroke}
+              <circle key={key} cx={cx} cy={cy} r={radius} fill="none"
+                stroke={color} strokeWidth={stroke}
                 strokeDasharray={dasharray} strokeDashoffset={dashoffset}
                 strokeLinecap="butt"
                 style={{ transition:'all 0.5s' }} />
@@ -57,19 +51,46 @@ const StatusDonut = ({ counts, total }) => {
           })}
         </g>
         <text x={cx} y={cy-4} textAnchor="middle" fontSize="14" fontWeight="800" fill="#1e293b">{total}</text>
-        <text x={cx} y={cy+12} textAnchor="middle" fontSize="8" fill="#94a3b8">SCHOOLS</text>
+        <text x={cx} y={cy+12} textAnchor="middle" fontSize="8" fill="#94a3b8">{centerLabel}</text>
       </svg>
-      <div style={{ display:'flex', flexDirection:'column', gap:'5px', flex:1, minWidth:'120px' }}>
-        {entries.map(([status, count]) => (
-          <div key={status} style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'0.75rem' }}>
-            <div style={{ width:'8px', height:'8px', borderRadius:'2px', background: STATUS_COLORS[status] || '#94a3b8', flexShrink:0 }} />
-            <span style={{ color:'#475569', flex:1 }}>{status}</span>
+      <div style={{ display:'flex', flexDirection:'column', gap:'5px', flex:1, minWidth:'120px', maxHeight: legendMaxHeight, overflowY: legendMaxHeight ? 'auto' : 'visible' }}>
+        {entries.map(({ key, label, count, color }) => (
+          <div key={key} style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'0.75rem' }}>
+            <div style={{ width:'8px', height:'8px', borderRadius:'2px', background: color, flexShrink:0 }} />
+            <span style={{ color:'#475569', flex:1 }}>{label}</span>
             <span style={{ fontWeight:'700', color:'#1e293b' }}>{count}</span>
           </div>
         ))}
       </div>
     </div>
   );
+};
+
+const STATUS_COLORS = {
+  'New':'#3b82f6','Contacted':'#f59e0b','LOI Pending':'#f97316',
+  'LOI Received':'#22c55e','Verification':'#8b5cf6',
+  'Data Requested':'#0ea5e9','Data Received':'#06b6d4',
+  'Completed':'#0e7490',
+};
+
+// Donut-style status distribution
+const StatusDonut = ({ counts, total }) => {
+  // Rejected/Archived are excluded from this breakdown — not shown in admin/superadmin status views.
+  const entries = Object.entries(counts)
+    .filter(([s,v]) => v > 0 && s !== 'Rejected' && s !== 'Archived')
+    .map(([status, count]) => ({ key: status, label: ADMIN_LABELS[status] || status, count, color: STATUS_COLORS[status] || '#94a3b8' }));
+  return <Donut entries={entries} total={total} centerLabel="SCHOOLS" />;
+};
+
+const STATE_PALETTE = ['#1e3a5f','#3b82f6','#f59e0b','#22c55e','#8b5cf6','#ef4444','#0e7490','#ec4899','#84cc16','#f97316','#6366f1','#14b8a6'];
+
+// Donut-style state distribution — schools grouped by address.state
+const StateDonut = ({ counts, total }) => {
+  const entries = Object.entries(counts)
+    .filter(([,v]) => v > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([state, count], i) => ({ key: state, label: state, count, color: STATE_PALETTE[i % STATE_PALETTE.length] }));
+  return <Donut entries={entries} total={total} centerLabel="SCHOOLS" legendMaxHeight="170px" />;
 };
 
 const SuperAdminDashboard = () => {
@@ -105,16 +126,18 @@ const SuperAdminDashboard = () => {
   }, [refresh]);
 
   const sc         = stats?.statusCounts || {};
+  const stc        = stats?.stateCounts || {};
   const total      = stats?.total || 0;
   const totalAdmins= stats?.totalAdmins || 0;
 
   const STATS = [
     { label:'Total Schools',  value: total,              icon:'🏫', color:'#1e3a5f', bg:'#e8f0f9', sub:'All time' },
     { label:'Total Admins',   value: totalAdmins,        icon:'👥', color:'#6d28d9', bg:'#ede9fe', sub:'Active administrators' },
-    { label:'New',            value: sc['New']||0,        icon:'🆕', color:'#1d4ed8', bg:'#dbeafe', sub:'Awaiting contact' },
+    { label:'New',            value: sc['New']||0,        icon:'🆕', color:'#1d4ed8', bg:'#dbeafe', sub:'Schools to be assign' },
+    { label:'LOI Received',   value: sc['LOI Received']||0, icon:'📄', color:'#15803d', bg:'#dcfce7', sub:'Schools that submitted LOI' },
+    { label:'DCAIS Participated', value: stats?.dcaisReceived||0, icon:'📑', color:'#0e7490', bg:'#cffafe', sub:'Schools that participated in DCAIS' },
     { label:'Completed',      value: sc['Completed']||0,  icon:'🎓', color:'#0e7490', bg:'#cffafe', sub:'Fully onboarded' },
     { label:'Hackathon Participated', value: stats?.hackathonParticipated||0, icon:'🏆', color:'#6d28d9', bg:'#ede9fe', sub:'Schools that took part' },
-    { label:'DCAIS Received', value: stats?.dcaisReceived||0, icon:'📑', color:'#0e7490', bg:'#cffafe', sub:'DCAIS confirmations received' },
   ];
 
   return (
@@ -152,6 +175,14 @@ const SuperAdminDashboard = () => {
             <div style={card}>
               <SectionTitle>Schools Added Monthly</SectionTitle>
               <BarChart data={activity} />
+            </div>
+          </div>
+
+          {/* Row 2b: State Distribution */}
+          <div style={{ marginBottom:'1.25rem' }}>
+            <div style={card}>
+              <SectionTitle>State Distribution</SectionTitle>
+              <StateDonut counts={stc} total={total} />
             </div>
           </div>
 

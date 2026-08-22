@@ -5,6 +5,7 @@ import { useState, useCallback } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import GoogleSignInButton from '../components/auth/GoogleSignInButton';
+import ForgotPasswordModal from '../components/auth/ForgotPasswordModal';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
@@ -19,6 +20,7 @@ const LoginPage = ({ roleConfig }) => {
   const [loading, setLoading]   = useState(false);
   const [showPass, setShowPass] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
 
   const isRegister = roleConfig.allowRegister && mode === 'register';
 
@@ -204,6 +206,12 @@ const LoginPage = ({ roleConfig }) => {
                 {showPass ? '🙈' : '👁'}
               </button>
             </div>
+            {!isRegister && (
+              <button type="button" onClick={() => setShowForgotPassword(true)}
+                style={s.forgotBtn}>
+                Forgot password?
+              </button>
+            )}
           </div>
 
           {isRegister && (
@@ -254,6 +262,14 @@ const LoginPage = ({ roleConfig }) => {
 
         <p style={s.footer}>Skillzza CRM &copy; {new Date().getFullYear()} · Confidential</p>
       </div>
+
+      {showForgotPassword && (
+        <ForgotPasswordModal
+          initialEmail={form.email}
+          accent={roleConfig.accent}
+          onClose={() => setShowForgotPassword(false)}
+        />
+      )}
     </div>
   );
 };
@@ -275,6 +291,7 @@ const s = {
   label:     { fontSize: '0.85rem', fontWeight: '500', color: '#374151' },
   input:     { padding: '0.6rem 0.85rem', border: '1.5px solid #d1d5db', borderRadius: '8px', fontSize: '0.9375rem', outline: 'none', width: '100%', boxSizing: 'border-box', color: '#1e293b' },
   eyeBtn:    { position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', padding: 0 },
+  forgotBtn: { alignSelf: 'flex-end', background: 'none', border: 'none', padding: 0, marginTop: '0.4rem', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', cursor: 'pointer', textDecoration: 'underline', fontFamily: 'inherit' },
   submitBtn: { color: '#fff', border: 'none', borderRadius: '8px', padding: '0.75rem', fontSize: '1rem', fontWeight: '600', cursor: 'pointer', marginTop: '0.25rem', width: '100%', transition: 'opacity 0.2s' },
   hint:      { marginTop: '1rem', background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '8px', padding: '0.625rem 0.875rem', fontSize: '0.78rem', color: '#475569' },
   footer:    { marginTop: '1.5rem', textAlign: 'center', fontSize: '0.72rem', color: '#94a3b8' },

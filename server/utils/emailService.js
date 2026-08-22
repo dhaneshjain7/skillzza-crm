@@ -109,6 +109,30 @@ const TEMPLATES = {
       </div>`,
   }),
 
+  'Password Reset Code': (data) => ({
+    subject: `Your Skillzza CRM Password Reset Code`,
+    html: `
+      <div style="font-family:'Segoe UI',sans-serif;max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.08);">
+        <div style="background:#1e3a5f;padding:24px 32px;">
+          <h1 style="color:#fff;margin:0;font-size:1.3rem;font-weight:800;letter-spacing:1px;">SKILLZZA CRM</h1>
+        </div>
+        <div style="padding:32px;">
+          <h2 style="color:#1e293b;font-size:1.1rem;margin:0 0 1rem;">🔑 Password Reset Code</h2>
+          <p style="color:#475569;font-size:0.9rem;line-height:1.6;">Use this code to reset your Skillzza CRM password. It expires in ${data.expiresInMinutes || 10} minutes.</p>
+          <div style="background:#f8fafc;border-radius:8px;padding:20px;margin:1.25rem 0;text-align:center;">
+            <div style="font-size:2rem;font-weight:800;letter-spacing:0.4em;color:#1e3a5f;">${data.code}</div>
+          </div>
+          <div style="background:#fef2f2;border-left:4px solid #ef4444;border-radius:0 8px 8px 0;padding:16px;margin:1rem 0;">
+            <p style="color:#991b1b;font-size:0.85rem;margin:0;">If you did not request this, you can safely ignore this email — your password won't change unless this code is used.</p>
+          </div>
+          <p style="color:#94a3b8;font-size:0.78rem;margin-top:2rem;">${new Date().toLocaleString('en-IN')}</p>
+        </div>
+        <div style="background:#f8fafc;padding:16px 32px;text-align:center;border-top:1px solid #f1f5f9;">
+          <p style="color:#94a3b8;font-size:0.75rem;margin:0;">Skillzza CRM · Confidential · Do not forward</p>
+        </div>
+      </div>`,
+  }),
+
   'Password Changed': (data) => ({
     subject: `Your Skillzza CRM Password Was Changed`,
     html: `

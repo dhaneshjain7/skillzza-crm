@@ -9,6 +9,7 @@ const {
   downloadDocument,
   reviewDocument,
   getDocumentTypes,
+  downloadTemplate,
 } = require('../controllers/documentController');
 
 const { protect }                              = require('../middleware/authMiddleware');
@@ -19,6 +20,9 @@ router.use(protect);
 
 // ── Document types (public to all logged in) ──────────────────────────────────
 router.get('/types', getDocumentTypes);
+
+// ── Blank template for a document type ────────────────────────────────────────
+router.get('/template/:documentType', downloadTemplate);
 
 // ── Validate only (dry run, no save) ─────────────────────────────────────────
 router.post('/validate', upload.single('file'), validateDocument);

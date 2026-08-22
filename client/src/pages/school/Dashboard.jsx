@@ -1,21 +1,23 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import Layout from '../../components/layout/Layout';
 import StatusBadge from '../../components/common/StatusBadge';
 import API from '../../api/axios';
 
+const API_ORIGIN = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace(/\/api\/?$/, '');
+
 const LIFECYCLE = [
   { stage: 'School Created',      icon: '🏫', key: 'New' },
   { stage: 'Assigned to Admin',   icon: '👤', key: 'Contacted' },
-  { stage: 'Contact Initiated',   icon: '📞', key: 'Contacted' },
   { stage: 'Documents Requested', icon: '📋', key: 'LOI Pending' },
-  { stage: 'Documents Uploaded',  icon: '📁', key: 'LOI Received' },
-  { stage: 'Verification',        icon: '🔍', key: 'Verification' },
+  { stage: 'Document Recived',    icon: '📁', key: 'LOI Received' },
+  { stage: 'Approval Recived',    icon: '🔍', key: 'Verification' },
+  { stage: 'Data Requested',      icon: '📨', key: 'Data Requested' },
+  { stage: 'Data Recived',        icon: '📥', key: 'Data Received' },
   { stage: 'Completed',           icon: '🎓', key: 'Completed' },
-  { stage: 'Archived',            icon: '🗄️', key: 'Archived' },
 ];
 
-const STATUS_ORDER = ['New','Contacted','LOI Pending','LOI Received','Verification','Completed','Archived'];
+const STATUS_ORDER = ['New','Contacted','LOI Pending','LOI Received','Verification','Data Requested','Data Received','Completed','Archived'];
 
 const SchoolDashboard = () => {
   const { user }   = useAuth();
@@ -26,6 +28,8 @@ const SchoolDashboard = () => {
   const [saving,   setSaving]  = useState(false);
   const [saveMsg,  setSaveMsg] = useState('');
   const [form,     setForm]    = useState({});
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const logoInputRef = useRef(null);
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -47,16 +51,17 @@ const SchoolDashboard = () => {
 
   const initForm = (s) => {
     setForm({
-      registrationNumber:  s.registrationNumber  || '',
       udiseCode:           s.udiseCode            || '',
       schoolName:          s.schoolName           || '',
       email:               s.email                || '',
       phone:               s.phone                || '',
       altPhone:            s.altPhone             || '',
       website:             s.website              || '',
+      spoc:                s.spoc                 || '',
+      spocPhone:           s.spocPhone            || '',
+      spocEmail:           s.spocEmail            || '',
       board:               s.board                || '',
       schoolType:          s.schoolType           || '',
-      establishedYear:     s.establishedYear      || '',
       studentCount:        s.studentCount         || '',
       staffCount:          s.staffCount           || '',
       'address.street':    s.address?.street      || '',
@@ -76,22 +81,44 @@ const SchoolDashboard = () => {
 
   const handleChange = (e) => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
 
+  const handleLogoChange = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    setUploadingLogo(true);
+    try {
+      const formData = new FormData();
+      formData.append('logo', file);
+      const res = await API.post(`/schools/${school._id}/logo`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setSchool(res.data.school);
+    } catch (e) {
+      setSaveMsg('❌ ' + (e.response?.data?.message || 'Logo upload failed. Please try again.'));
+      setTimeout(() => setSaveMsg(''), 4000);
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
     setSaveMsg('');
     try {
       const payload = {
-        registrationNumber: form.registrationNumber,
         udiseCode:          form.udiseCode,
         schoolName:         form.schoolName,
         email:              form.email,
         phone:              form.phone,
         altPhone:           form.altPhone,
         website:            form.website,
+        spoc:               form.spoc,
+        spocPhone:          form.spocPhone,
+        spocEmail:          form.spocEmail,
         board:              form.board,
         schoolType:         form.schoolType,
-        establishedYear:    form.establishedYear ? Number(form.establishedYear) : undefined,
         studentCount:       form.studentCount    ? Number(form.studentCount)    : undefined,
         staffCount:         form.staffCount      ? Number(form.staffCount)      : undefined,
         address: {
@@ -166,9 +193,22 @@ const SchoolDashboard = () => {
           {/* School Identity Card */}
           <div style={{ background:'linear-gradient(135deg,#1a3d30,#1e5f4e)', borderRadius:'14px', padding:'1.5rem', marginBottom:'1.5rem', color:'#fff' }}>
             <div style={{ display:'flex', alignItems:'flex-start', gap:'1rem', flexWrap:'wrap' }}>
-              <div style={{ width:'56px', height:'56px', borderRadius:'12px', background:'rgba(255,255,255,0.15)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'1.75rem', flexShrink:0 }}>🏫</div>
+              <div
+                onClick={() => logoInputRef.current?.click()}
+                title="Click to change logo"
+                style={{ width:'88px', height:'88px', borderRadius:'12px', background:'rgba(255,255,255,0.15)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'2.5rem', flexShrink:0, cursor:'pointer', overflow:'hidden', position:'relative' }}
+              >
+                {school.logo
+                  ? <img src={`${API_ORIGIN}${school.logo}`} alt="School logo" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                  : '🏫'}
+                <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.8rem', fontWeight:'700', opacity:0, transition:'opacity 0.15s' }}
+                  onMouseEnter={e => e.currentTarget.style.opacity = 1}
+                  onMouseLeave={e => e.currentTarget.style.opacity = 0}>
+                  {uploadingLogo ? '...' : '✏️'}
+                </div>
+                <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoChange} style={{ display:'none' }} />
+              </div>
               <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:'0.7rem', color:'rgba(255,255,255,0.6)', fontWeight:'600', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:'0.3rem' }}>Your School</div>
                 <h2 style={{ margin:'0 0 0.3rem', fontSize:'1.3rem', fontWeight:'800' }}>{school.schoolName}</h2>
                 <div style={{ fontSize:'0.82rem', color:'rgba(255,255,255,0.7)' }}>
                   {[school.board, school.schoolType, school.address?.city, school.address?.state].filter(Boolean).join(' · ')}
@@ -176,21 +216,32 @@ const SchoolDashboard = () => {
                 <div style={{ marginTop:'0.75rem', display:'flex', gap:'1rem', flexWrap:'wrap', alignItems:'center' }}>
                   <div>
                     <div style={{ fontSize:'0.65rem', color:'rgba(255,255,255,0.5)', textTransform:'uppercase' }}>Status</div>
-                    <StatusBadge status={school.currentStatus} size="lg" />
+                    <StatusBadge status={school.currentStatus} size="lg" raw />
                   </div>
                   <div>
-                    <div style={{ fontSize:'0.65rem', color:'rgba(255,255,255,0.5)', textTransform:'uppercase' }}>Email</div>
-                    <div style={{ fontSize:'0.82rem', fontWeight:'600' }}>{school.email}</div>
+                    <div style={{ fontSize:'0.65rem', color:'rgba(255,255,255,0.5)', textTransform:'uppercase' }}>UDISE Code</div>
+                    <div style={{ fontSize:'0.82rem', fontWeight:'600' }}>{school.udiseCode || 'Not provided'}</div>
                   </div>
                   <div>
-                    <div style={{ fontSize:'0.65rem', color:'rgba(255,255,255,0.5)', textTransform:'uppercase' }}>Phone</div>
-                    <div style={{ fontSize:'0.82rem', fontWeight:'600' }}>{school.phone}</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize:'0.65rem', color:'rgba(255,255,255,0.5)', textTransform:'uppercase' }}>Assigned Admin</div>
-                    <div style={{ fontSize:'0.82rem', fontWeight:'600' }}>{school.assignedAdmin?.name || 'Not yet assigned'}</div>
+                    <div style={{ fontSize:'0.65rem', color:'rgba(255,255,255,0.5)', textTransform:'uppercase' }}>Website</div>
+                    <div style={{ fontSize:'0.82rem', fontWeight:'600' }}>{school.website || 'Not provided'}</div>
                   </div>
                 </div>
+                
+                {/* <div style={{ marginTop:'0.75rem', display:'flex', gap:'1rem', flexWrap:'wrap', alignItems:'center' }}>
+                  <div>
+                    <div style={{ fontSize:'0.65rem', color:'rgba(255,255,255,0.5)', textTransform:'uppercase' }}>Skillzza SPOC</div>
+                    <div style={{ fontSize:'0.82rem', fontWeight:'600' }}>{school.assignedAdmin?.name || 'Not yet assigned'}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize:'0.65rem', color:'rgba(255,255,255,0.5)', textTransform:'uppercase' }}>Admin Email</div>
+                    <div style={{ fontSize:'0.82rem', fontWeight:'600' }}>{school.assignedAdmin?.email || '—'}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize:'0.65rem', color:'rgba(255,255,255,0.5)', textTransform:'uppercase' }}>Admin Phone</div>
+                    <div style={{ fontSize:'0.82rem', fontWeight:'600' }}>{school.assignedAdmin?.phone || '—'}</div>
+                  </div>
+                </div> */}
               </div>
               {/* Profile completion + Edit */}
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:'0.75rem', flexShrink:0 }}>
@@ -226,15 +277,19 @@ const SchoolDashboard = () => {
                 <Section title="Basic Details">
                   <Row>
                     <Field label="School Name *"         name="schoolName"         value={form.schoolName}         onChange={handleChange} required />
-                    <Field label="Registration Number"   name="registrationNumber" value={form.registrationNumber} onChange={handleChange} />
-                  </Row>
-                  <Row>
                     <Field label="UDISE Code *"          name="udiseCode"          value={form.udiseCode}          onChange={handleChange} required />
-                    <div />
                   </Row>
                   <Row>
-                    <Field label="Email *"               name="email"              value={form.email}              onChange={handleChange} required type="email" />
-                    <Field label="Phone *"               name="phone"              value={form.phone}              onChange={handleChange} required />
+                    <Field label="School SPOC"           name="spoc"               value={form.spoc}               onChange={handleChange} />
+                    <Field label="SPOC Phone"            name="spocPhone"          value={form.spocPhone}          onChange={handleChange} />
+                  </Row>
+                  <Row>
+                    <Field label="SPOC Email"            name="spocEmail"          value={form.spocEmail}          onChange={handleChange} type="email" />
+                    <div /> {/* empty cell */}
+                  </Row>
+                  <Row>
+                    <Field label="School Email *"        name="email"              value={form.email}              onChange={handleChange} required type="email" />
+                    <Field label="School Phone *"        name="phone"              value={form.phone}              onChange={handleChange} required />
                   </Row>
                   <Row>
                     <Field label="Alt Phone"             name="altPhone"           value={form.altPhone}           onChange={handleChange} />
@@ -247,12 +302,8 @@ const SchoolDashboard = () => {
                       options={['Primary','Secondary','Higher Secondary','College','Other']} />
                   </Row>
                   <Row>
-                    <Field label="Established Year"      name="establishedYear"    value={form.establishedYear}    onChange={handleChange} type="number" />
                     <Field label="Student Count (6-12)"  name="studentCount"       value={form.studentCount}       onChange={handleChange} type="number" />
-                  </Row>
-                  <Row>
                     <Field label="Staff Count (6-12)"    name="staffCount"         value={form.staffCount}         onChange={handleChange} type="number" />
-                    <div /> {/* empty cell */}
                   </Row>
                 </Section>
 
@@ -339,25 +390,18 @@ const SchoolDashboard = () => {
             {/* Right column */}
             <div style={{ display:'flex', flexDirection:'column', gap:'1.25rem' }}>
               <div style={card}>
-                <h3 style={sTitle}>School Information</h3>
+                <h3 style={sTitle}>School Details</h3>
                 <div style={{ display:'flex', flexDirection:'column', gap:'0.5rem' }}>
                   {[
-                    { label:'Assigned Admin',   value: school.assignedAdmin?.name || 'Not yet assigned' },
-                    { label:'Admin Email',      value: school.assignedAdmin?.email || '—' },
-                    { label:'Admin Phone',      value: school.assignedAdmin?.phone || '—' },
-                    { label:'Registration No.', value: school.registrationNumber || 'Not provided' },
+                    { label:'School Name',      value: school.schoolName || '—' },
+                    { label:'School Phone',     value: school.phone || '—' },
+                    { label:'School Email',     value: school.email || '—' },
+                    { label:'Website',          value: school.website || 'Not provided' },
                     { label:'UDISE Code',       value: school.udiseCode || 'Not provided' },
+                    { label:'School SPOC',      value: school.spoc || 'Not provided' },
+                    { label:'SPOC Phone',       value: school.spocPhone || 'Not provided' },
+                    { label:'SPOC Email',       value: school.spocEmail || 'Not provided' },
                     { label:'CPD Training Level', value: school.cpdTrainingLevel || 'Not set' },
-                    { label:'Board',            value: school.board || 'Not specified' },
-                    { label:'Type',             value: school.schoolType || 'Not specified' },
-                    { label:'Est. Year',        value: school.establishedYear || '—' },
-                    { label:'Students (6-12)',  value: school.studentCount || '—' },
-                    { label:'Staff (6-12)',     value: school.staffCount || '—' },
-                    { label:'Principal',        value: school.principal?.name || 'Not provided' },
-                    { label:'Principal Email',  value: school.principal?.email || '—' },
-                    { label:'City',             value: school.address?.city || '—' },
-                    { label:'State',            value: school.address?.state || '—' },
-                    { label:'Pincode',          value: school.address?.pincode || '—' },
                   ].map(({ label, value }) => (
                     <div key={label} style={{ display:'flex', justifyContent:'space-between', padding:'0.3rem 0', borderBottom:'1px solid #f8fafc' }}>
                       <span style={{ fontSize:'0.75rem', color:'#94a3b8', fontWeight:'600' }}>{label}</span>
@@ -379,7 +423,7 @@ const SchoolDashboard = () => {
                   {school.currentStatus === 'New' && (
                     <Action icon="⏳" text="Waiting for admin to contact you" color="#92400e" bg="#fffbeb" border="#fde68a" />
                   )}
-                  {['Approved','Completed'].includes(school.currentStatus) && completion >= 100 && (
+                  {school.currentStatus !== 'LOI Pending' && school.currentStatus !== 'New' && completion >= 100 && (
                     <div style={{ textAlign:'center', padding:'1rem', color:'#065f46', fontSize:'0.85rem', fontWeight:'600' }}>
                       🎉 No pending actions — all good!
                     </div>
@@ -403,8 +447,8 @@ const SchoolDashboard = () => {
                     <div style={{ flex:1, paddingBottom:'1rem', borderBottom: i < history.length - 1 ? '1px solid #f8fafc' : 'none' }}>
                       <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', marginBottom:'4px', flexWrap:'wrap' }}>
                         {h.oldStatus
-                          ? <><StatusBadge status={h.oldStatus} size="sm" /><span style={{ color:'#94a3b8', fontSize:'0.8rem' }}>→</span><StatusBadge status={h.newStatus} size="sm" /></>
-                          : <><span style={{ fontSize:'0.75rem', color:'#94a3b8' }}>Started as</span><StatusBadge status={h.newStatus} size="sm" /></>
+                          ? <><StatusBadge status={h.oldStatus} size="sm" raw /><span style={{ color:'#94a3b8', fontSize:'0.8rem' }}>→</span><StatusBadge status={h.newStatus} size="sm" raw /></>
+                          : <><span style={{ fontSize:'0.75rem', color:'#94a3b8' }}>Started as</span><StatusBadge status={h.newStatus} size="sm" raw /></>
                         }
                       </div>
                       {h.remarks && <div style={{ fontSize:'0.78rem', color:'#64748b', fontStyle:'italic', marginBottom:'4px' }}>"{h.remarks}"</div>}

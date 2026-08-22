@@ -1,7 +1,13 @@
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const { User, RefreshToken, ActivityLog, School, SchoolStatusHistory } = require('../models');
 const { sendTokens, generateAccessToken, REFRESH_COOKIE_OPTIONS } = require('../utils/generateTokens');
 const { verifyGoogleToken } = require('../utils/googleAuth');
 const { notifyPasswordChanged } = require('../utils/notificationService');
+const { sendEmail } = require('../utils/emailService');
+
+const RESET_CODE_TTL_MINUTES = 10;
+const RESET_MAX_ATTEMPTS = 5;
 
 // ── Helper: log activity ──────────────────────────────────────────────────────
 const logActivity = async ({ user, action, description, req }) => {
@@ -218,6 +224,125 @@ const changePassword = async (req, res) => {
   }
 };
 
+// ── @POST /api/auth/forgot-password ──────────────────────────────────────────
+// Any role — request a 6-digit reset code emailed to the account's registered address.
+// Always responds with the same generic message so this can't be used to enumerate
+// which emails have accounts.
+const forgotPassword = async (req, res) => {
+  const genericResponse = {
+    success: true,
+    message: 'If an account exists for this email, a reset code has been sent to it.',
+  };
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Email is required.' });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase().trim(), isActive: true });
+    if (!user) {
+      return res.status(200).json(genericResponse); // don't reveal whether the account exists
+    }
+
+    const code = crypto.randomInt(100000, 1000000).toString(); // 6 digits
+    const salt = await bcrypt.genSalt(10);
+    user.resetPasswordToken    = await bcrypt.hash(code, salt);
+    user.resetPasswordExpires  = new Date(Date.now() + RESET_CODE_TTL_MINUTES * 60 * 1000);
+    user.resetPasswordAttempts = 0;
+    await user.save();
+
+    await sendEmail({
+      to:          user.email,
+      triggerType: 'Password Reset Code',
+      data:        { code, expiresInMinutes: RESET_CODE_TTL_MINUTES },
+    });
+
+    await logActivity({
+      user,
+      action:      'Password Reset Requested',
+      description: `${user.name} requested a password reset code`,
+      req,
+    });
+
+    res.status(200).json(genericResponse);
+  } catch (err) {
+    console.error('forgotPassword error:', err);
+    // Still return the generic response — don't leak server errors as an existence signal.
+    res.status(200).json(genericResponse);
+  }
+};
+
+// ── @POST /api/auth/reset-password ───────────────────────────────────────────
+// Any role — complete a reset using the emailed 6-digit code.
+const resetPassword = async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
+
+    if (!email || !code || !newPassword) {
+      return res.status(400).json({ success: false, message: 'Email, code and new password are required.' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ success: false, message: 'New password must be at least 6 characters.' });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase().trim() })
+      .select('+resetPasswordToken +resetPasswordExpires +resetPasswordAttempts +password');
+
+    const invalidMsg = { success: false, message: 'Invalid or expired reset code. Please request a new one.' };
+
+    if (!user || !user.resetPasswordToken || !user.resetPasswordExpires) {
+      return res.status(400).json(invalidMsg);
+    }
+    if (user.resetPasswordExpires < new Date()) {
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpires = undefined;
+      user.resetPasswordAttempts = 0;
+      await user.save();
+      return res.status(400).json(invalidMsg);
+    }
+    if (user.resetPasswordAttempts >= RESET_MAX_ATTEMPTS) {
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpires = undefined;
+      user.resetPasswordAttempts = 0;
+      await user.save();
+      return res.status(400).json({ success: false, message: 'Too many incorrect attempts. Please request a new code.' });
+    }
+
+    const codeMatches = await bcrypt.compare(code, user.resetPasswordToken);
+    if (!codeMatches) {
+      user.resetPasswordAttempts += 1;
+      await user.save();
+      return res.status(400).json(invalidMsg);
+    }
+
+    user.password = newPassword;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    user.resetPasswordAttempts = 0;
+    await user.save();
+
+    // Revoke all refresh tokens — force re-login everywhere with the new password
+    await RefreshToken.updateMany(
+      { user: user._id, isRevoked: false },
+      { isRevoked: true, revokedAt: new Date() }
+    );
+
+    await logActivity({
+      user,
+      action:      'Password Changed',
+      description: `${user.name} reset their password via forgot-password code`,
+      req,
+    });
+
+    await notifyPasswordChanged({ user, io: req.app.get('io') });
+
+    res.status(200).json({ success: true, message: 'Password reset successfully. Please log in with your new password.' });
+  } catch (err) {
+    console.error('resetPassword error:', err);
+    res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
 // ── @POST /api/auth/register/school ──────────────────────────────────────────
 // Email/password self-registration for School Users.
 // Creates a new School (status "New") + linked school_user account, then logs
@@ -409,4 +534,4 @@ const googleAuthSchool = async (req, res) => {
   }
 };
 
-module.exports = { login, refreshToken, logout, getMe, changePassword, registerSchool, googleAuthSchool };
+module.exports = { login, refreshToken, logout, getMe, changePassword, forgotPassword, resetPassword, registerSchool, googleAuthSchool };

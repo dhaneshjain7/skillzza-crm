@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import NotificationBell from '../common/NotificationBell';
+import ChangePasswordModal from '../common/ChangePasswordModal';
 import { useAuth } from '../../context/AuthContext';
 
 const TITLES = {
@@ -19,7 +20,14 @@ const TITLES = {
   '/school/dashboard':     'My Dashboard',
   '/school/documents':     'Documents',
   '/school/messages':      'Messages',
+  '/school/activity':      'Activity',
   '/school/profile':       'School Profile',
+};
+
+const ROLE_LABEL = {
+  superadmin:  'SuperAdmin',
+  admin:       'Admin',
+  school_user: 'School',
 };
 
 const ROLE_ACCENT = {
@@ -30,6 +38,7 @@ const ROLE_ACCENT = {
 
 const Layout = ({ children }) => {
   const [collapsed, setCollapsed] = useState(window.innerWidth < 768);
+  const [showChangePassword, setShowChangePassword] = useState(false);
   const location = useLocation();
   const { user } = useAuth();
   const title    = TITLES[location.pathname] || 'Skillzza CRM';
@@ -62,10 +71,18 @@ const Layout = ({ children }) => {
             {/* Notification Bell */}
             <NotificationBell />
 
-            {/* Avatar */}
-            <div style={{ width:'32px', height:'32px', borderRadius:'50%', background: accent, color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'700', fontSize:'0.875rem', cursor:'default' }}>
-              {user?.name?.[0]?.toUpperCase()}
-            </div>
+            {/* Avatar — click to change password */}
+            {ROLE_LABEL[user?.role] ? (
+              <button onClick={() => setShowChangePassword(true)} title="Change password"
+                style={{ height:'32px', padding:'0 0.9rem', borderRadius:'16px', background: accent, color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'700', fontSize:'0.8rem', cursor:'pointer', whiteSpace:'nowrap', border:'none', fontFamily:'inherit' }}>
+                {ROLE_LABEL[user?.role]}
+              </button>
+            ) : (
+              <button onClick={() => setShowChangePassword(true)} title="Change password"
+                style={{ width:'32px', height:'32px', borderRadius:'50%', background: accent, color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'700', fontSize:'0.875rem', cursor:'pointer', border:'none', fontFamily:'inherit' }}>
+                {user?.name?.[0]?.toUpperCase()}
+              </button>
+            )}
           </div>
         </header>
 
@@ -74,6 +91,8 @@ const Layout = ({ children }) => {
           {children}
         </main>
       </div>
+
+      {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
     </div>
   );
 };

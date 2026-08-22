@@ -5,7 +5,7 @@ const path = require('path');
 
 const SCHEMAS = {
   school_approval: {
-    label: 'School Approval',
+    label: 'LOI',
     required: [
       'SL NO',
       'School Name',
@@ -94,28 +94,34 @@ const SCHEMAS = {
     required: [
       'First Name',
       'Last Name',
+      'Email ID',
       'School Name',
       'School City',
       'UDISE Code',
     ],
     aliases: {
-      'first name':   'First Name',
-      'firstname':    'First Name',
-      'last name':    'Last Name',
-      'lastname':     'Last Name',
-      'school name':  'School Name',
-      'school city':  'School City',
-      'city':         'School City',
-      'udise code':   'UDISE Code',
-      'udise':        'UDISE Code',
+      'first name':     'First Name',
+      'firstname':      'First Name',
+      'last name':      'Last Name',
+      'lastname':       'Last Name',
+      'email id':       'Email ID',
+      'email':          'Email ID',
+      'teacher email':  'Email ID',
+      'teacher email id':'Email ID',
+      'school name':    'School Name',
+      'school city':    'School City',
+      'city':           'School City',
+      'udise code':     'UDISE Code',
+      'udise':          'UDISE Code',
     },
     validators: {
       'UDISE Code': (v) => /^\d{11}$/.test(String(v).trim()) || 'UDISE Code must be 11 digits',
+      'Email ID':   (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v).trim()) || 'Invalid email format',
     },
   },
 
   adobe_student_accounts: {
-    label: 'Adobe Student Accounts',
+    label: 'Adobe Student IDs',
     required: ['Name', 'ID', 'PW', 'School Name', 'Class Section', 'UDISE Code', 'School City', 'State'],
     aliases: {
       'name':          'Name',
@@ -138,7 +144,7 @@ const SCHEMAS = {
   },
 
   adobe_teacher_accounts: {
-    label: 'Adobe Teacher Accounts',
+    label: 'Adobe Teacher IDs',
     required: ['Name', 'ID', 'PW', 'School Name', 'UDISE Code', 'School City', 'State'],
     aliases: {
       'name':        'Name',
@@ -244,11 +250,8 @@ const parseXLS = (filePath) => {
   return { headers, rows };
 };
 
-// ── Validate ──────────────────────────────────────────────────────────────────
-const validateFile = (parsed, documentType) => {
-  const schema = SCHEMAS[documentType];
-  if (!schema) throw new Error(`Unknown document type: ${documentType}`);
-
+// ── Validate against an arbitrary schema object (not just the Document SCHEMAS map) ──
+const validateAgainstSchema = (parsed, schema) => {
   const { headers, rows } = parsed;
 
   const normalise = (h) => {
@@ -303,6 +306,10 @@ const validateFile = (parsed, documentType) => {
     if (errs.length > 0) {
       rowErrors.push(...errs);
     } else {
+      // Preserve the original spreadsheet row number — callers that report per-row
+      // results (e.g. bulk school import) need it, since validRows drops any rows
+      // filtered out above and would otherwise mislabel rows by their new index.
+      Object.defineProperty(normRow, '__rowNum', { value: idx + 2, enumerable: false });
       validRows.push(normRow);
     }
   });
@@ -319,4 +326,116 @@ const validateFile = (parsed, documentType) => {
   };
 };
 
-module.exports = { parseFile, validateFile, SCHEMAS };
+const validateFile = (parsed, documentType) => {
+  const schema = SCHEMAS[documentType];
+  if (!schema) throw new Error(`Unknown document type: ${documentType}`);
+  return validateAgainstSchema(parsed, schema);
+};
+
+// ── Bulk import schema for Students Activity (Admin/SuperAdmin only) ───────────
+// Separate from the Document SCHEMAS above — this drives a School's studentsActivity
+// array directly, not a reviewable Document record.
+const STUDENTS_ACTIVITY_SCHEMA = {
+  label: 'Students Activity',
+  required: ['Student Name'],
+  columns: [
+    'Student Name', 'Class', 'Section', 'Fiscal Year',
+    'MAU Q1', 'MAU Q2', 'MAU Q3', 'MAU Q4',
+    'DCAIS Jan', 'DCAIS Feb', 'DCAIS Mar', 'DCAIS Apr', 'DCAIS May', 'DCAIS Jun',
+    'DCAIS Jul', 'DCAIS Aug', 'DCAIS Sep', 'DCAIS Oct', 'DCAIS Nov', 'DCAIS Dec',
+    'Annual Hackathon Participated', 'Certificate Received', 'Certificate Link',
+  ],
+  aliases: {
+    'student name': 'Student Name',
+    'name':         'Student Name',
+    'class':        'Class',
+    'section':      'Section',
+    'fiscal year':  'Fiscal Year',
+    'mau q1': 'MAU Q1', 'mau q2': 'MAU Q2', 'mau q3': 'MAU Q3', 'mau q4': 'MAU Q4',
+    'q1': 'MAU Q1', 'q2': 'MAU Q2', 'q3': 'MAU Q3', 'q4': 'MAU Q4',
+    'dcais jan': 'DCAIS Jan', 'dcais feb': 'DCAIS Feb', 'dcais mar': 'DCAIS Mar', 'dcais apr': 'DCAIS Apr',
+    'dcais may': 'DCAIS May', 'dcais jun': 'DCAIS Jun', 'dcais jul': 'DCAIS Jul', 'dcais aug': 'DCAIS Aug',
+    'dcais sep': 'DCAIS Sep', 'dcais oct': 'DCAIS Oct', 'dcais nov': 'DCAIS Nov', 'dcais dec': 'DCAIS Dec',
+    'jan': 'DCAIS Jan', 'feb': 'DCAIS Feb', 'mar': 'DCAIS Mar', 'apr': 'DCAIS Apr',
+    'may': 'DCAIS May', 'jun': 'DCAIS Jun', 'jul': 'DCAIS Jul', 'aug': 'DCAIS Aug',
+    'sep': 'DCAIS Sep', 'oct': 'DCAIS Oct', 'nov': 'DCAIS Nov', 'dec': 'DCAIS Dec',
+    'annual hackathon participated': 'Annual Hackathon Participated',
+    'hackathon participated':        'Annual Hackathon Participated',
+    'certificate received': 'Certificate Received',
+    'certificate link':     'Certificate Link',
+  },
+};
+
+// ── Bulk import schema for Teachers Activity (Admin/SuperAdmin only) ───────────
+const TEACHERS_ACTIVITY_SCHEMA = {
+  label: 'Teachers Activity',
+  required: ['Teacher Name'],
+  columns: [
+    'Teacher Name', 'Fiscal Year',
+    'CPD Q1', 'CPD Q2', 'CPD Q3', 'CPD Q4',
+    'DCAIS Jan', 'DCAIS Feb', 'DCAIS Mar', 'DCAIS Apr', 'DCAIS May', 'DCAIS Jun',
+    'DCAIS Jul', 'DCAIS Aug', 'DCAIS Sep', 'DCAIS Oct', 'DCAIS Nov', 'DCAIS Dec',
+    'Certificate Received', 'Certificate Link',
+  ],
+  aliases: {
+    'teacher name': 'Teacher Name',
+    'name':         'Teacher Name',
+    'fiscal year':  'Fiscal Year',
+    'cpd q1': 'CPD Q1', 'cpd q2': 'CPD Q2', 'cpd q3': 'CPD Q3', 'cpd q4': 'CPD Q4',
+    'q1': 'CPD Q1', 'q2': 'CPD Q2', 'q3': 'CPD Q3', 'q4': 'CPD Q4',
+    'dcais jan': 'DCAIS Jan', 'dcais feb': 'DCAIS Feb', 'dcais mar': 'DCAIS Mar', 'dcais apr': 'DCAIS Apr',
+    'dcais may': 'DCAIS May', 'dcais jun': 'DCAIS Jun', 'dcais jul': 'DCAIS Jul', 'dcais aug': 'DCAIS Aug',
+    'dcais sep': 'DCAIS Sep', 'dcais oct': 'DCAIS Oct', 'dcais nov': 'DCAIS Nov', 'dcais dec': 'DCAIS Dec',
+    'jan': 'DCAIS Jan', 'feb': 'DCAIS Feb', 'mar': 'DCAIS Mar', 'apr': 'DCAIS Apr',
+    'may': 'DCAIS May', 'jun': 'DCAIS Jun', 'jul': 'DCAIS Jul', 'aug': 'DCAIS Aug',
+    'sep': 'DCAIS Sep', 'oct': 'DCAIS Oct', 'nov': 'DCAIS Nov', 'dec': 'DCAIS Dec',
+    'certificate received': 'Certificate Received',
+    'certificate link':     'Certificate Link',
+  },
+};
+
+// ── Bulk import schema for creating many Schools at once (Admin/SuperAdmin only) ──
+// School Name/UDISE/Email/Phone/City/State are required — same as the single "Add School"
+// form (School.address.city and address.state are `required: true` on the model).
+const SCHOOLS_BULK_SCHEMA = {
+  label: 'Schools',
+  required: ['School Name', 'UDISE Code', 'Email', 'Phone', 'City', 'State'],
+  columns: [
+    'School Name', 'UDISE Code', 'Email', 'Phone', 'Alt Phone', 'Website',
+    'Board', 'School Type', 'Student Count', 'Staff Count',
+    'Street', 'City', 'District', 'State', 'Pincode',
+    'Principal Name', 'Principal Email', 'Principal Phone',
+  ],
+  aliases: {
+    'school name':      'School Name',
+    'name':             'School Name',
+    'udise code':       'UDISE Code',
+    'udise':            'UDISE Code',
+    'email':            'Email',
+    'school email':     'Email',
+    'phone':            'Phone',
+    'school phone':     'Phone',
+    'alt phone':        'Alt Phone',
+    'website':          'Website',
+    'board':            'Board',
+    'school type':      'School Type',
+    'student count':    'Student Count',
+    'staff count':      'Staff Count',
+    'street':           'Street',
+    'street address':   'Street',
+    'city':             'City',
+    'district':         'District',
+    'state':            'State',
+    'pincode':          'Pincode',
+    'pin code':         'Pincode',
+    'principal name':   'Principal Name',
+    'principal email':  'Principal Email',
+    'principal phone':  'Principal Phone',
+  },
+  validators: {
+    'UDISE Code': (v) => /^\d{11}$/.test(String(v).trim()) || 'UDISE Code must be 11 digits',
+    'Email':      (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v).trim()) || 'Invalid email format',
+  },
+};
+
+module.exports = { parseFile, validateFile, validateAgainstSchema, SCHEMAS, STUDENTS_ACTIVITY_SCHEMA, TEACHERS_ACTIVITY_SCHEMA, SCHOOLS_BULK_SCHEMA };

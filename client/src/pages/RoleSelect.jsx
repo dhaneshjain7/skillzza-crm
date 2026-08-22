@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useEffect } from 'react';
+import logo from '../assets/skillzza-logo.png';
 
 const roles = [
   {
@@ -59,11 +60,10 @@ const RoleSelect = () => {
       {/* Header */}
       <div style={s.header}>
         <div style={s.logoWrap}>
-          <div style={s.logoBox}>S</div>
-          <div>
-            <div style={s.logoName}>SKILLZZA</div>
-            <div style={s.logoSub}>Customer Relationship Management</div>
+          <div style={s.logoImgBox}>
+            <img src={logo} alt="Skillzza" style={{ height:'28px', width:'auto', maxWidth:'170px', objectFit:'contain', display:'block' }} />
           </div>
+          <div style={s.logoSub}>Customer Relationship Management</div>
         </div>
       </div>
 
@@ -137,24 +137,13 @@ const s = {
     alignItems:     'center',
     gap:            '12px',
   },
-  logoBox: {
-    width:          '40px',
-    height:         '40px',
+  logoImgBox: {
     background:     '#fff',
     borderRadius:   '8px',
+    padding:        '5px 10px',
     display:        'flex',
     alignItems:     'center',
-    justifyContent: 'center',
-    color:          '#1e3a5f',
-    fontSize:       '1.25rem',
-    fontWeight:     '800',
     flexShrink:     0,
-  },
-  logoName: {
-    color:          '#fff',
-    fontWeight:     '700',
-    fontSize:       '1rem',
-    letterSpacing:  '2px',
   },
   logoSub: {
     color:          'rgba(255,255,255,0.55)',

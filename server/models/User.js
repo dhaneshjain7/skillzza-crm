@@ -32,9 +32,11 @@ const userSchema = new mongoose.Schema(
       system: { type: Boolean, default: true },
     },
 
-    // Password reset
-    resetPasswordToken:   { type: String, select: false },
-    resetPasswordExpires: { type: Date,   select: false },
+    // Password reset — resetPasswordToken stores a bcrypt hash of the 6-digit
+    // code emailed to the user, never the code itself.
+    resetPasswordToken:    { type: String, select: false },
+    resetPasswordExpires:  { type: Date,   select: false },
+    resetPasswordAttempts: { type: Number, default: 0, select: false },
 
     // Login history (last 10 entries)
     loginHistory: [
