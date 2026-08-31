@@ -1,8 +1,20 @@
 import { useState, useEffect, useRef } from 'react';
-import downloadFile from '../../utils/downloadFile';
+import downloadFile, { fetchDocumentBlob } from '../../utils/downloadFile';
+import mammoth from 'mammoth';
+import DOMPurify from 'dompurify';
 import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../../components/layout/Layout';
 import API from '../../api/axios';
+
+const FILE_ICONS = { csv: '📋', xls: '📊', xlsx: '📊', pdf: '📕', doc: '📝', docx: '📝', jpg: '🖼️', jpeg: '🖼️', png: '🖼️' };
+
+// Extensions we can render inline in the preview modal (beyond parsed spreadsheet rows).
+const PREVIEWABLE_KIND = (ext) => {
+  if (['jpg', 'jpeg', 'png'].includes(ext)) return 'image';
+  if (ext === 'pdf') return 'pdf';
+  if (ext === 'docx') return 'docx'; // legacy .doc (binary OLE format) isn't supported by mammoth
+  return null;
+};
 
 const STATUS_STYLE = {
   'Pending':             { bg: '#fef9c3', color: '#854d0e' },
@@ -34,6 +46,45 @@ const AdminDocuments = () => {
   const [viewing,   setViewing]   = useState(null); // doc being previewed in-platform
   const [reviewForm,setReviewForm]= useState({ status: '', rejectReason: '' });
   const [saving,    setSaving]    = useState(false);
+
+  // In-modal preview for non-spreadsheet files (image/PDF/DOCX)
+  const [filePreview, setFilePreview] = useState({ status: 'idle' }); // { status: 'idle'|'loading'|'ready'|'error', kind, url, html }
+
+  useEffect(() => {
+    let objectUrl = null;
+    let cancelled = false;
+
+    const load = async () => {
+      if (!viewing || viewing.parsedData?.rows?.length) { setFilePreview({ status: 'idle' }); return; }
+      const kind = PREVIEWABLE_KIND(viewing.fileExtension);
+      if (!kind) { setFilePreview({ status: 'idle' }); return; }
+
+      setFilePreview({ status: 'loading', kind });
+      try {
+        const blob = await fetchDocumentBlob(viewing._id);
+        if (cancelled) return;
+
+        if (kind === 'image' || kind === 'pdf') {
+          objectUrl = URL.createObjectURL(blob);
+          setFilePreview({ status: 'ready', kind, url: objectUrl });
+        } else if (kind === 'docx') {
+          const arrayBuffer = await blob.arrayBuffer();
+          const result = await mammoth.convertToHtml({ arrayBuffer });
+          if (cancelled) return;
+          setFilePreview({ status: 'ready', kind, html: DOMPurify.sanitize(result.value) });
+        }
+      } catch (err) {
+        console.error('Preview error:', err);
+        if (!cancelled) setFilePreview({ status: 'error', kind });
+      }
+    };
+    load();
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [viewing]);
 
   // Send-to-school (Adobe accounts) upload state
   const [sendType,      setSendType]      = useState('adobe_student_accounts');
@@ -245,7 +296,7 @@ const AdminDocuments = () => {
                   <div key={doc._id} style={{ border: '1px solid #f1f5f9', borderRadius: '10px', padding: '1rem', background: '#fafcff' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
                       <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flex: 1, minWidth: 0 }}>
-                        <span style={{ fontSize: '1.4rem' }}>{doc.fileExtension === 'csv' ? '📋' : '📊'}</span>
+                        <span style={{ fontSize: '1.4rem' }}>{FILE_ICONS[doc.fileExtension] || '📄'}</span>
                         <div style={{ minWidth: 0 }}>
                           <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '0.875rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{doc.fileName}</div>
                           <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
@@ -308,7 +359,7 @@ const AdminDocuments = () => {
             <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: '14px', width: '100%', maxWidth: '900px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', overflow: 'hidden' }}>
               {/* Header */}
               <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
-                <span style={{ fontSize: '1.5rem' }}>{viewing.fileExtension === 'csv' ? '📋' : '📊'}</span>
+                <span style={{ fontSize: '1.5rem' }}>{FILE_ICONS[viewing.fileExtension] || '📄'}</span>
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontWeight: '700', color: '#1e293b', fontSize: '0.95rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{viewing.fileName}</div>
                   <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '2px' }}>
@@ -327,12 +378,27 @@ const AdminDocuments = () => {
                 </div>
               )}
 
-              {/* Data table */}
+              {/* Data table / file preview */}
               <div style={{ overflow: 'auto', flex: 1 }}>
-                {rows.length === 0 ? (
+                {rows.length === 0 && filePreview.status === 'loading' ? (
+                  <div style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
+                    <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>⏳</div>
+                    <div style={{ fontWeight: '600', color: '#475569' }}>Loading preview...</div>
+                  </div>
+                ) : rows.length === 0 && filePreview.status === 'ready' && filePreview.kind === 'image' ? (
+                  <div style={{ textAlign: 'center', padding: '1rem' }}>
+                    <img src={filePreview.url} alt={viewing.fileName} style={{ maxWidth: '100%', maxHeight: '70vh', borderRadius: '8px' }} />
+                  </div>
+                ) : rows.length === 0 && filePreview.status === 'ready' && filePreview.kind === 'pdf' ? (
+                  <iframe src={filePreview.url} title={viewing.fileName} style={{ width: '100%', height: '70vh', border: 'none' }} />
+                ) : rows.length === 0 && filePreview.status === 'ready' && filePreview.kind === 'docx' ? (
+                  <div style={{ padding: '1.5rem 2rem', fontSize: '0.85rem', color: '#1e293b', lineHeight: 1.6 }} dangerouslySetInnerHTML={{ __html: filePreview.html }} />
+                ) : rows.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
                     <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📄</div>
-                    <div style={{ fontWeight: '600', color: '#475569' }}>No preview available for this file</div>
+                    <div style={{ fontWeight: '600', color: '#475569' }}>
+                      {filePreview.status === 'error' ? 'Could not load preview' : 'No preview available for this file'}
+                    </div>
                     <div style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>Use Download to open it locally</div>
                   </div>
                 ) : (

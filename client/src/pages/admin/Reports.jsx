@@ -5,7 +5,7 @@ import API from '../../api/axios';
 import { exportPDF, exportExcel, exportWord } from '../../utils/exportReport';
 
 const REPORTS = [
-  { key: 'schools',       label: 'My Schools Report',    icon: '🏫', desc: 'All assigned schools with status and details' },
+  { key: 'schools',       label: 'Schools Profile',      icon: '🏫', desc: 'All assigned schools with status and details' },
   { key: 'status',        label: 'Status Report',        icon: '📊', desc: 'Status breakdown of your assigned schools' },
   { key: 'communication', label: 'Communication Report', icon: '💬', desc: 'Message activity across your schools' },
   { key: 'growth',        label: 'Monthly Report',       icon: '📈', desc: 'Monthly progress of your assigned schools' },

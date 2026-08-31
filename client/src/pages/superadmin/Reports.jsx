@@ -5,8 +5,9 @@ import API from '../../api/axios';
 import { exportPDF, exportExcel, exportWord } from '../../utils/exportReport';
 
 const REPORTS = [
-  { key: 'schools',           label: 'Schools Report',       icon: '🏫', desc: 'All schools with full details, status and admin assignment' },
+  { key: 'schools',           label: 'School Profile',       icon: '🏫', desc: 'All schools with full details, status and admin assignment' },
   { key: 'status',            label: 'Status Report',        icon: '📊', desc: 'Status distribution and recent status changes' },
+  { key: 'monthly',           label: 'Monthly Report',       icon: '📅', desc: 'Monthly cohorts — schools assigned, LOI/data received, CPD/DCAIS done' },
   { key: 'growth',            label: 'Growth Report',        icon: '📈', desc: 'Monthly school registration trends' },
   { key: 'admin-performance', label: 'Admin Performance',    icon: '👥', desc: 'Admin-wise school completion and activity metrics' },
   { key: 'communication',     label: 'Communication Report', icon: '💬', desc: 'Message activity per school' },
@@ -176,7 +177,7 @@ const SuperAdminReports = () => {
               {active === 'schools' && (
                 <input type="text" placeholder="Board" value={filters.board} onChange={e => setFilters(f => ({ ...f, board: e.target.value }))} style={filterInput} />
               )}
-              {active === 'growth' && (
+              {['growth','monthly'].includes(active) && (
                 <select value={filters.months} onChange={e => setFilters(f => ({ ...f, months: e.target.value }))} style={filterSelect}>
                   {[3,6,12,24].map(m => <option key={m} value={m}>Last {m} months</option>)}
                 </select>

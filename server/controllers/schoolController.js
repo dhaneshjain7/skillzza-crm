@@ -2,6 +2,7 @@ const fs = require('fs');
 const { School, SchoolStatusHistory, AuditLog, ActivityLog, User } = require('../models');
 const { notifyStatusUpdate, notifyAdminAssigned, notifyPasswordChanged } = require('../utils/notificationService');
 const { parseFile, validateAgainstSchema, STUDENTS_ACTIVITY_SCHEMA, TEACHERS_ACTIVITY_SCHEMA, SCHOOLS_BULK_SCHEMA } = require('../utils/fileParser');
+const { buildSchoolFilter } = require('../utils/schoolFilter');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -347,57 +348,7 @@ const getSchools = async (req, res) => {
       activity,
     } = req.query;
 
-    const filter = {};
-
-    // Role-based scoping
-    if (req.user.role === 'admin') {
-      filter.assignedAdmin = req.user._id;
-    } else if (req.user.role === 'school_user') {
-      filter.schoolUser = req.user._id;
-    }
-
-    // Filters
-    if (status)        filter.currentStatus = status;
-    if (assignedAdmin) filter.assignedAdmin = assignedAdmin;
-    if (city)          filter['address.city']     = new RegExp(city, 'i');
-    if (state)         filter['address.state']    = new RegExp(state, 'i');
-    if (district)      filter['address.district'] = new RegExp(district, 'i');
-
-    // Activity filter — from the school's Activity tab (LOI Received, DCAIS Participated, etc.)
-    // `activity` is a comma-separated list of "field:value" pairs, e.g. "loiReceived:Yes,hackathonRegistered:No".
-    // Multiple values for the same field are OR'd ($in); different fields are AND'd (both must match).
-    const ACTIVITY_FIELDS = ['loiReceived', 'dcaisConfirmation', 'studentDataReceived', 'teachersDataReceived', 'hackathonRegistered', 'poeSubmitted'];
-    if (activity) {
-      const grouped = {};
-      activity.split(',').forEach(pair => {
-        const [field, value] = pair.split(':');
-        if (ACTIVITY_FIELDS.includes(field) && ['Yes', 'No'].includes(value)) {
-          grouped[field] = grouped[field] || new Set();
-          grouped[field].add(value);
-        }
-      });
-      Object.entries(grouped).forEach(([field, values]) => {
-        const arr = Array.from(values);
-        filter[field] = arr.length > 1 ? { $in: arr } : arr[0];
-      });
-    }
-
-    // Archived filter
-    if (isArchived === 'true')  filter.isArchived = true;
-    else if (isArchived === 'false') filter.isArchived = false;
-
-    // Text search
-    if (search) {
-      filter.$or = [
-        { schoolName:         new RegExp(search, 'i') },
-        { email:              new RegExp(search, 'i') },
-        { phone:              new RegExp(search, 'i') },
-        { udiseCode:          new RegExp(search, 'i') },
-        { 'address.city':     new RegExp(search, 'i') },
-        { 'address.state':    new RegExp(search, 'i') },
-        { 'address.district': new RegExp(search, 'i') },
-      ];
-    }
+    const filter = buildSchoolFilter({ status, assignedAdmin, city, state, district, activity, isArchived, search }, req.user);
 
     const skip      = (Number(page) - 1) * Number(limit);
     const sortOrder = order === 'asc' ? 1 : -1;
@@ -659,8 +610,14 @@ const assignAdmin = async (req, res) => {
     }
 
     const previousAdmin = school.assignedAdmin;
+    const oldStatus      = school.currentStatus;
 
     school.assignedAdmin = adminId;
+    // Move the pipeline forward on first assignment — but never regress a school
+    // that's already past "New" (e.g. re-assigning to a different admin later).
+    if (school.currentStatus === 'New') {
+      school.currentStatus = 'Contacted';
+    }
     await school.save();
 
     // Audit log
@@ -674,6 +631,45 @@ const assignAdmin = async (req, res) => {
       description:   `Admin assigned to "${school.schoolName}": ${admin.name}`,
       req,
     });
+
+    // If the status auto-advanced, record it the same way a manual status change would be
+    if (oldStatus !== school.currentStatus) {
+      await SchoolStatusHistory.create({
+        school:        school._id,
+        oldStatus,
+        newStatus:     school.currentStatus,
+        updatedBy:     req.user._id,
+        updatedByRole: req.user.role,
+        remarks:       `Auto-updated on admin assignment (${admin.name})`,
+      });
+
+      await logAudit({
+        school:        school._id,
+        eventType:     'Status Changed',
+        performedBy:   req.user,
+        field:         'currentStatus',
+        previousValue: oldStatus,
+        newValue:      school.currentStatus,
+        description:   `Status changed from "${oldStatus}" to "${school.currentStatus}" (admin assigned)`,
+        req,
+      });
+
+      await notifyStatusUpdate({
+        school,
+        oldStatus,
+        newStatus: school.currentStatus,
+        remarks:   `Admin assigned: ${admin.name}`,
+        updatedBy: req.user,
+        io:        req.app.get('io'),
+      });
+
+      req.app.get('io')?.to(`school_${school._id}`).emit('status_updated', {
+        schoolId:  school._id,
+        oldStatus,
+        newStatus: school.currentStatus,
+        updatedBy: req.user.name,
+      });
+    }
 
     await logActivity({
       user:          req.user,
@@ -867,6 +863,7 @@ const getStats = async (req, res) => {
       totalAdmins,
       hackathonParticipated,
       dcaisReceived,
+      cpdTrainingDone,
     ] = await Promise.all([
       School.countDocuments(filter),
       School.aggregate([
@@ -885,6 +882,7 @@ const getStats = async (req, res) => {
       User.countDocuments({ role: 'admin', isDeleted: false }),
       School.countDocuments({ ...filter, isDeleted: false, hackathonRegistered: 'Yes' }),
       School.countDocuments({ ...filter, isDeleted: false, dcaisConfirmation: 'Yes' }),
+      School.countDocuments({ ...filter, isDeleted: false, cpdTrainingDone: 'Yes' }),
     ]);
 
     // Format status/state counts into objects
@@ -912,6 +910,7 @@ const getStats = async (req, res) => {
         totalAdmins,
         hackathonParticipated,
         dcaisReceived,
+        cpdTrainingDone,
       },
     });
   } catch (err) {

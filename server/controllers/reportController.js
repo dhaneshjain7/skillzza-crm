@@ -223,6 +223,89 @@ const growthReport = async (req, res) => {
   }
 };
 
+// ── @GET /api/reports/monthly ─────────────────────────────────────────────────
+// Monthly cohort report — schools grouped by the month they joined, showing each
+// cohort's CURRENT progress (admin assigned, LOI/data received, CPD/DCAIS done).
+// There's no per-field timestamp for when these flags were set, only when the
+// school itself was created, so "Month" here means signup month, not event month.
+const monthlyReport = async (req, res) => {
+  try {
+    const { format = 'json', months = 12 } = req.query;
+    const numMonths = Number(months);
+
+    const from = new Date();
+    from.setMonth(from.getMonth() - (numMonths - 1));
+    from.setDate(1);
+    from.setHours(0, 0, 0, 0);
+
+    const filter = { createdAt: { $gte: from }, isDeleted: false };
+    if (req.user.role === 'admin') filter.assignedAdmin = req.user._id;
+
+    const monthly = await School.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: {
+            year:  { $year:  '$createdAt' },
+            month: { $month: '$createdAt' },
+          },
+          count:               { $sum: 1 },
+          assigned:            { $sum: { $cond: [{ $ne: ['$assignedAdmin', null] }, 1, 0] } },
+          loiReceived:         { $sum: { $cond: [{ $eq: ['$loiReceived', 'Yes'] }, 1, 0] } },
+          studentDataReceived: { $sum: { $cond: [{ $eq: ['$studentDataReceived', 'Yes'] }, 1, 0] } },
+          teachersDataReceived:{ $sum: { $cond: [{ $eq: ['$teachersDataReceived', 'Yes'] }, 1, 0] } },
+          cpdTrainingDone:     { $sum: { $cond: [{ $eq: ['$cpdTrainingDone', 'Yes'] }, 1, 0] } },
+          dcaisConfirmation:   { $sum: { $cond: [{ $eq: ['$dcaisConfirmation', 'Yes'] }, 1, 0] } },
+        },
+      },
+      { $sort: { '_id.year': 1, '_id.month': 1 } },
+    ]);
+
+    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    const dataByKey = {};
+    monthly.forEach(m => {
+      dataByKey[`${m._id.year}-${m._id.month}`] = m;
+    });
+
+    const rows = [];
+    const cursor = new Date(from);
+    const now = new Date();
+    while (cursor <= now) {
+      const year  = cursor.getFullYear();
+      const month = cursor.getMonth() + 1;
+      const key   = `${year}-${month}`;
+      const m     = dataByKey[key];
+
+      rows.push({
+        'Month':                        `${MONTHS[month - 1]} ${year}`,
+        'Number of Schools Assigned':   m?.assigned             || 0,
+        'LOI Recived':                  m?.loiReceived          || 0,
+        'Students Data Recived':        m?.studentDataReceived  || 0,
+        'Teachers Data Recived':        m?.teachersDataReceived || 0,
+        'CPD Done':                     m?.cpdTrainingDone      || 0,
+        'DCAIS Done':                   m?.dcaisConfirmation    || 0,
+      });
+
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+
+    if (format === 'csv') {
+      return sendCSV(res, 'monthly_report', Object.keys(rows[0] || {}), rows);
+    }
+
+    sendJSON(res, {
+      report:      'Monthly Report',
+      period:      `Last ${months} months`,
+      rows,
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('monthlyReport error:', err);
+    res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
 // ── @GET /api/reports/admin-performance ──────────────────────────────────────
 // Super Admin only — admin performance report
 const adminPerformanceReport = async (req, res) => {
@@ -457,6 +540,7 @@ module.exports = {
   schoolsReport,
   statusReport,
   growthReport,
+  monthlyReport,
   adminPerformanceReport,
   communicationReport,
   auditTrailReport,

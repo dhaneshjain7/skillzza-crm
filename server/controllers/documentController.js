@@ -4,6 +4,12 @@ const { Document, School, AuditLog, ActivityLog } = require('../models');
 const { parseFile, validateFile, SCHEMAS }         = require('../utils/fileParser');
 const { notifyDocumentUploaded, notifyDocumentSent } = require('../utils/notificationService');
 
+// LOI is a signed letter (PDF/DOC/DOCX/image) — not a data spreadsheet — so it skips
+// the column/row parsing & validation every other document type goes through.
+const DOCUMENT_ONLY_TYPES      = ['school_approval'];
+const DOCUMENT_ONLY_EXTENSIONS = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png'];
+const SPREADSHEET_EXTENSIONS   = ['.csv', '.xls', '.xlsx'];
+
 // ── Helper: log ───────────────────────────────────────────────────────────────
 const log = async ({ user, action, description, schoolId, req }) => {
   try {
@@ -37,22 +43,38 @@ const uploadDocument = async (req, res) => {
       });
     }
 
+    const isDocumentOnly = DOCUMENT_ONLY_TYPES.includes(documentType);
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    const allowedExts = isDocumentOnly ? DOCUMENT_ONLY_EXTENSIONS : SPREADSHEET_EXTENSIONS;
+    if (!allowedExts.includes(ext)) {
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({
+        success: false,
+        message: `Invalid file type for ${SCHEMAS[documentType].label}. Accepted: ${allowedExts.join(', ')}`,
+      });
+    }
+
     const school = await School.findById(schoolId);
     if (!school) {
+      fs.unlinkSync(req.file.path);
       return res.status(404).json({ success: false, message: 'School not found.' });
     }
 
-    // Parse file
-    let parsed;
-    try {
-      parsed = await parseFile(req.file.path);
-    } catch (parseErr) {
-      fs.unlinkSync(req.file.path); // delete bad file
-      return res.status(400).json({ success: false, message: `File parse error: ${parseErr.message}` });
-    }
+    let validation = { valid: true, totalRows: 0, validRows: 0, errors: [], warnings: [], rows: [], headers: [], schema: SCHEMAS[documentType].label };
 
-    // Validate columns + rows
-    const validation = validateFile(parsed, documentType);
+    if (!isDocumentOnly) {
+      // Parse file
+      let parsed;
+      try {
+        parsed = await parseFile(req.file.path);
+      } catch (parseErr) {
+        fs.unlinkSync(req.file.path); // delete bad file
+        return res.status(400).json({ success: false, message: `File parse error: ${parseErr.message}` });
+      }
+
+      // Validate columns + rows
+      validation = validateFile(parsed, documentType);
+    }
 
     // Mark previous version of same type as not latest
     await Document.updateMany(
@@ -85,8 +107,9 @@ const uploadDocument = async (req, res) => {
       reviewedAt:      isStaffUpload ? new Date() : null,
       version:         versionCount + 1,
       isLatestVersion: true,
-      // Store parsed data
-      parsedData: {
+      // Document-only types (LOI) have nothing to parse — leave parsedData null so
+      // the client doesn't render a misleading "0 valid rows" chip for a signed letter.
+      parsedData: isDocumentOnly ? null : {
         valid:      validation.valid,
         totalRows:  validation.totalRows,
         validRows:  validation.validRows,
@@ -148,6 +171,16 @@ const validateDocument = async (req, res) => {
     if (!documentType || !SCHEMAS[documentType]) {
       fs.unlinkSync(req.file.path);
       return res.status(400).json({ success: false, message: 'Invalid document type.' });
+    }
+
+    // Document-only types (LOI) have no columns/rows to validate — the client skips
+    // this endpoint for them and uploads directly, but handle it gracefully anyway.
+    if (DOCUMENT_ONLY_TYPES.includes(documentType)) {
+      fs.unlinkSync(req.file.path);
+      return res.status(200).json({
+        success: true,
+        validation: { valid: true, totalRows: 0, validRows: 0, errors: [], warnings: [], preview: [], headers: [], schema: SCHEMAS[documentType].label },
+      });
     }
 
     let parsed;
@@ -288,7 +321,8 @@ const getDocumentTypes = (req, res) => {
 };
 
 // ── @GET /api/documents/template/:documentType ────────────────────────────────
-// Blank .xlsx with just the required column headers, ready for a school to fill in
+// LOI: the static signed-letter template (.docx). Everything else: a blank .xlsx
+// with just the required column headers, ready for a school to fill in.
 const downloadTemplate = (req, res) => {
   try {
     const { documentType } = req.params;
@@ -298,6 +332,14 @@ const downloadTemplate = (req, res) => {
         success: false,
         message: `Invalid document type. Valid types: ${Object.keys(SCHEMAS).join(', ')}`,
       });
+    }
+
+    if (DOCUMENT_ONLY_TYPES.includes(documentType)) {
+      const templatePath = path.join(__dirname, '../assets/templates/LOI_Template.docx');
+      if (!fs.existsSync(templatePath)) {
+        return res.status(404).json({ success: false, message: 'Template file not found on server.' });
+      }
+      return res.download(templatePath, 'LOI_Template.docx');
     }
 
     const XLSX = require('xlsx');

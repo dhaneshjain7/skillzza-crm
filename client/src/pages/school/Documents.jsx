@@ -4,7 +4,7 @@ import Layout from '../../components/layout/Layout';
 import API from '../../api/axios';
 
 const DOC_TYPES = [
-  { key: 'school_approval',        label: 'LOI',                     icon: '🏫', desc: 'SL NO, School Name, City/District, State, UDISE Code, Board (CBSE/ICSE/IB/SB), Student Count (6-12), Teacher Count (6-12), SPOC Name, SPOC Mobile, SPOC Email' },
+  { key: 'school_approval',        label: 'LOI',                     icon: '🏫', desc: 'Please refer to the attached LOI template, which should be printed on the school letterhead. Please fill it out, sign and stamp it, and upload a copy.' },
   { key: 'student_data',           label: 'Student Data',            icon: '🎓', desc: 'First Name, Last Name, Grade, Section, School Name, City/State, UDISE Code' },
   { key: 'teacher_data',           label: 'Teacher Data',            icon: '👩‍🏫', desc: 'First Name, Last Name, Email ID, School Name, School City, UDISE Code' },
   { key: 'adobe_student_accounts', label: 'Adobe Student IDs',       icon: '💻', desc: 'Name, ID, PW, School Name, Class Section, UDISE Code, City, State' },
@@ -13,6 +13,12 @@ const DOC_TYPES = [
 
 // School-side uploads are disabled for these — admin manages Adobe ID accounts directly.
 const NO_UPLOAD_TYPES = ['adobe_student_accounts', 'adobe_teacher_accounts'];
+
+// LOI is a signed letter (PDF/DOC/DOCX/image), not a data spreadsheet — it skips the
+// row/column validation preview and just goes straight to upload.
+const DOCUMENT_ONLY_TYPES = ['school_approval'];
+const DOCUMENT_ONLY_ACCEPT = '.pdf,.doc,.docx,.jpg,.jpeg,.png';
+const SPREADSHEET_ACCEPT   = '.csv,.xls,.xlsx';
 
 const STATUS_STYLE = {
   'Pending':            { bg: '#fef9c3', color: '#854d0e' },
@@ -53,7 +59,8 @@ const SchoolDocuments = () => {
     setDocuments(res.data.grouped || {});
   };
 
-  // Step 1: validate file before upload
+  // Step 1: validate file before upload (skipped for document-only types like LOI —
+  // there are no columns/rows to check, so it goes straight to a simple confirm step)
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -61,6 +68,8 @@ const SchoolDocuments = () => {
     setValidation(null);
     setPendingFile(file);
     setStage('preview');
+
+    if (DOCUMENT_ONLY_TYPES.includes(selected)) return;
 
     const form = new FormData();
     form.append('file', file);
@@ -118,6 +127,7 @@ const SchoolDocuments = () => {
 
   const currentType = DOC_TYPES.find(d => d.key === selected);
   const currentDocs = documents[selected] || [];
+  const isDocumentOnly = DOCUMENT_ONLY_TYPES.includes(selected);
 
   return (
     <Layout>
@@ -152,14 +162,18 @@ const SchoolDocuments = () => {
                 <div>
                   <div style={sectionTitle}>{currentType?.icon} Upload {currentType?.label}</div>
                   <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
-                    Required columns: <span style={{ fontWeight: '600', color: '#1e293b' }}>{currentType?.desc}</span>
+                    {isDocumentOnly ? currentType?.desc : (
+                      <>Required columns: <span style={{ fontWeight: '600', color: '#1e293b' }}>{currentType?.desc}</span></>
+                    )}
                   </div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem', flexShrink: 0 }}>
-                  <span style={{ fontSize: '0.7rem', color: '#94a3b8', background: '#f8fafc', padding: '3px 8px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>CSV · XLS · XLSX</span>
+                  <span style={{ fontSize: '0.7rem', color: '#94a3b8', background: '#f8fafc', padding: '3px 8px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                    {isDocumentOnly ? 'PDF · DOC · DOCX · JPG · PNG' : 'CSV · XLS · XLSX'}
+                  </span>
                   <button
                     type="button"
-                    onClick={() => downloadTemplate(selected, `${currentType?.label || 'Template'}.xlsx`)}
+                    onClick={() => downloadTemplate(selected, `${currentType?.label || 'Template'}${isDocumentOnly ? '.docx' : '.xlsx'}`)}
                     style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: '600', color: '#1e3a5f', background: '#e8f0f9', border: '1px solid #cfe0f3', borderRadius: '6px', padding: '4px 10px', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
                   >
                     ⬇ Sample Template
@@ -178,6 +192,13 @@ const SchoolDocuments = () => {
                   <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>✅</div>
                   <div style={{ fontWeight: '700', color: '#065f46', fontSize: '0.9rem' }}>File uploaded successfully!</div>
                 </div>
+              ) : stage === 'preview' && isDocumentOnly ? (
+                <DocumentConfirm
+                  fileName={pendingFile?.name}
+                  onConfirm={handleConfirmUpload}
+                  onCancel={handleCancel}
+                  uploading={uploading}
+                />
               ) : stage === 'preview' && validation ? (
                 <ValidationPreview
                   validation={validation}
@@ -187,7 +208,7 @@ const SchoolDocuments = () => {
                   uploading={uploading}
                 />
               ) : (
-                <DropZone fileRef={fileRef} onChange={handleFileChange} uploading={uploading} />
+                <DropZone fileRef={fileRef} onChange={handleFileChange} uploading={uploading} accept={isDocumentOnly ? DOCUMENT_ONLY_ACCEPT : SPREADSHEET_ACCEPT} supportsText={isDocumentOnly ? 'Supports PDF, DOC, DOCX, JPG, PNG · Max 10MB' : 'Supports CSV, XLS, XLSX · Max 10MB'} />
               )}
             </div>
           )}
@@ -214,7 +235,7 @@ const SchoolDocuments = () => {
 };
 
 // ── Drop zone ─────────────────────────────────────────────────────────────────
-const DropZone = ({ fileRef, onChange, uploading }) => {
+const DropZone = ({ fileRef, onChange, uploading, accept = '.csv,.xls,.xlsx', supportsText = 'Supports CSV, XLS, XLSX · Max 10MB' }) => {
   const [drag, setDrag] = useState(false);
 
   return (
@@ -224,15 +245,35 @@ const DropZone = ({ fileRef, onChange, uploading }) => {
       onDrop={e => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files[0]; if (f && fileRef.current) { const dt = new DataTransfer(); dt.items.add(f); fileRef.current.files = dt.files; onChange({ target: fileRef.current }); } }}
       style={{ display: 'block', border: `2px dashed ${drag ? '#1e3a5f' : '#cbd5e1'}`, borderRadius: '10px', padding: '2rem', textAlign: 'center', cursor: 'pointer', background: drag ? '#f0f6ff' : '#f8fafc', transition: 'all 0.2s' }}
     >
-      <input ref={fileRef} type="file" accept=".csv,.xls,.xlsx" onChange={onChange} style={{ display: 'none' }} disabled={uploading} />
+      <input ref={fileRef} type="file" accept={accept} onChange={onChange} style={{ display: 'none' }} disabled={uploading} />
       <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>{uploading ? '⏳' : '📂'}</div>
       <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '0.9rem', marginBottom: '0.25rem' }}>
         {uploading ? 'Validating file...' : 'Click to browse or drag & drop'}
       </div>
-      <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Supports CSV, XLS, XLSX · Max 10MB</div>
+      <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{supportsText}</div>
     </label>
   );
 };
+
+// ── Document-only confirm — for signed-letter uploads (LOI) with nothing to validate ──
+const DocumentConfirm = ({ fileName, onConfirm, onCancel, uploading }) => (
+  <div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '0.625rem 0.875rem', background: '#f8fafc', borderRadius: '8px', marginBottom: '1rem', border: '1px solid #e2e8f0' }}>
+      <span style={{ fontSize: '1.2rem' }}>📄</span>
+      <span style={{ fontSize: '0.85rem', fontWeight: '600', color: '#1e293b', flex: 1 }}>{fileName}</span>
+    </div>
+    <div style={{ display: 'flex', gap: '0.625rem' }}>
+      <button onClick={onCancel} disabled={uploading}
+        style={{ flex: 1, padding: '0.65rem', background: '#f1f5f9', border: 'none', borderRadius: '8px', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.85rem', fontWeight: '600', color: '#475569' }}>
+        Cancel
+      </button>
+      <button onClick={onConfirm} disabled={uploading}
+        style={{ flex: 2, padding: '0.65rem', background: '#1e3a5f', border: 'none', borderRadius: '8px', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.85rem', fontWeight: '700', color: '#fff' }}>
+        {uploading ? 'Uploading...' : 'Confirm Upload'}
+      </button>
+    </div>
+  </div>
+);
 
 // ── Validation preview ────────────────────────────────────────────────────────
 const ValidationPreview = ({ validation, fileName, onConfirm, onCancel, uploading }) => (
@@ -312,6 +353,8 @@ const ValidationPreview = ({ validation, fileName, onConfirm, onCancel, uploadin
 );
 
 // ── Document row in history ───────────────────────────────────────────────────
+const FILE_ICONS = { csv: '📋', xls: '📊', xlsx: '📊', pdf: '📕', doc: '📝', docx: '📝', jpg: '🖼️', jpeg: '🖼️', png: '🖼️' };
+
 const DocumentRow = ({ doc }) => {
   const st = STATUS_STYLE[doc.status] || { bg: '#f1f5f9', color: '#475569' };
   const isData = doc.parsedData;
@@ -320,7 +363,7 @@ const DocumentRow = ({ doc }) => {
     <div style={{ border: '1px solid #f1f5f9', borderRadius: '10px', padding: '0.875rem', background: '#fafcff' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', flex: 1, minWidth: 0 }}>
-          <span style={{ fontSize: '1.3rem' }}>{doc.fileExtension === 'csv' ? '📋' : '📊'}</span>
+          <span style={{ fontSize: '1.3rem' }}>{FILE_ICONS[doc.fileExtension] || '📄'}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: '0.85rem', fontWeight: '600', color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{doc.fileName}</div>
             <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>

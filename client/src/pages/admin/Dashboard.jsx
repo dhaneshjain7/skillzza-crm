@@ -73,6 +73,7 @@ const AdminDashboard = () => {
   const STATS = [
     { label:'Assigned Schools', value: total,              icon:'🏫', color:'#1a3a5c', bg:'#dbeafe', sub:'Total assigned to you' },
     { label:'LOI Received',     value: sc['LOI Received']||0, icon:'📄', color:'#15803d', bg:'#dcfce7', sub:'Schools that submitted LOI' },
+    { label:'CPD Training Done', value: stats?.cpdTrainingDone||0, icon:'🎓', color:'#9333ea', bg:'#f3e8ff', sub:'Schools with CPD training done' },
     { label:'DCAIS Participated', value: stats?.dcaisReceived||0, icon:'📑', color:'#0e7490', bg:'#cffafe', sub:'Schools that participated in DCAIS' },
     { label:'Completed',        value: sc['Completed']||0, icon:'✅', color:'#065f46', bg:'#d1fae5', sub:'Successfully closed' },
     { label:'Hackathon Participated', value: stats?.hackathonParticipated||0, icon:'🏆', color:'#6d28d9', bg:'#ede9fe', sub:'Schools that took part' },

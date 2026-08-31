@@ -135,6 +135,7 @@ const SuperAdminDashboard = () => {
     { label:'Total Admins',   value: totalAdmins,        icon:'👥', color:'#6d28d9', bg:'#ede9fe', sub:'Active administrators' },
     { label:'New',            value: sc['New']||0,        icon:'🆕', color:'#1d4ed8', bg:'#dbeafe', sub:'Schools to be assign' },
     { label:'LOI Received',   value: sc['LOI Received']||0, icon:'📄', color:'#15803d', bg:'#dcfce7', sub:'Schools that submitted LOI' },
+    { label:'CPD Training Done', value: stats?.cpdTrainingDone||0, icon:'🎓', color:'#9333ea', bg:'#f3e8ff', sub:'Schools with CPD training done' },
     { label:'DCAIS Participated', value: stats?.dcaisReceived||0, icon:'📑', color:'#0e7490', bg:'#cffafe', sub:'Schools that participated in DCAIS' },
     { label:'Completed',      value: sc['Completed']||0,  icon:'🎓', color:'#0e7490', bg:'#cffafe', sub:'Fully onboarded' },
     { label:'Hackathon Participated', value: stats?.hackathonParticipated||0, icon:'🏆', color:'#6d28d9', bg:'#ede9fe', sub:'Schools that took part' },

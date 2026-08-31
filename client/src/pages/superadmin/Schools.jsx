@@ -14,6 +14,7 @@ const ACTIVITY_FIELDS = [
   { value: 'teachersDataReceived',  label: 'Teachers Data Received' },
   { value: 'hackathonRegistered',   label: 'Hackathon Participated' },
   { value: 'poeSubmitted',          label: 'POE Recived' },
+  { value: 'cpdTrainingDone',       label: 'CPD Training Done' },
 ];
 
 const SchoolsPage = ({ role = 'superadmin' }) => {
@@ -32,6 +33,12 @@ const SchoolsPage = ({ role = 'superadmin' }) => {
   const limit = 10;
   const accent = role === 'superadmin' ? '#1e3a5f' : '#1a3a5c';
 
+  // AI natural-language query
+  const [aiQueryIn, setAiQueryIn] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiSummary, setAiSummary] = useState(''); // set once a query has been applied/answered
+  const [aiUnderstood, setAiUnderstood] = useState(true);
+
   const activityCount = Object.values(activityChecks).reduce((n, arr) => n + arr.length, 0);
 
   const toggleActivityCheck = (field, value) => {
@@ -42,6 +49,46 @@ const SchoolsPage = ({ role = 'superadmin' }) => {
       if (current.size === 0) delete next[field]; else next[field] = Array.from(current);
       return next;
     });
+    setPage(1);
+  };
+
+  const handleAiQuery = async (e) => {
+    e.preventDefault();
+    if (!aiQueryIn.trim()) return;
+    setAiLoading(true);
+    setAiSummary('');
+    try {
+      const { data } = await API.post('/ai/query-schools', { query: aiQueryIn });
+      setAiUnderstood(data.understood);
+      setAiSummary(data.summary || '');
+      if (data.understood) {
+        setStatus(data.appliedFilter?.status || '');
+        const nextActivity = {};
+        (data.appliedFilter?.activity || []).forEach(pair => {
+          const [field, value] = pair.split(':');
+          nextActivity[field] = [value];
+        });
+        setActivityChecks(nextActivity);
+        const textFilter = data.appliedFilter?.search || data.appliedFilter?.city || data.appliedFilter?.state || '';
+        setSearch(textFilter);
+        setSearchIn(textFilter);
+        setPage(1);
+      }
+    } catch (err) {
+      setAiUnderstood(false);
+      setAiSummary(err.response?.data?.message || 'Could not process that query. Please try again.');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const clearAiQuery = () => {
+    setAiQueryIn('');
+    setAiSummary('');
+    setStatus('');
+    setActivityChecks({});
+    setSearch('');
+    setSearchIn('');
     setPage(1);
   };
 
@@ -94,6 +141,27 @@ const SchoolsPage = ({ role = 'superadmin' }) => {
           + Add School
         </button>
       </div>
+
+      {/* AI natural-language query */}
+      <form onSubmit={handleAiQuery} style={{ display:'flex', gap:'0.5rem', marginBottom:'0.6rem' }}>
+        <input type="text" placeholder='Ask in plain English, e.g. "Schools where LOI is received and CPD Training done"'
+          value={aiQueryIn} onChange={e => setAiQueryIn(e.target.value)}
+          style={{ flex:1, padding:'0.55rem 0.875rem', border:'1.5px solid #c7d2fe', borderRadius:'8px', fontSize:'0.875rem', outline:'none', fontFamily:'inherit', background:'#f5f7ff' }} />
+        <button type="submit" disabled={aiLoading || !aiQueryIn.trim()}
+          style={{ background:'#4338ca', color:'#fff', border:'none', borderRadius:'8px', padding:'0.55rem 1.1rem', fontSize:'0.875rem', fontWeight:'600', cursor: aiLoading ? 'default' : 'pointer', fontFamily:'inherit', opacity: aiLoading || !aiQueryIn.trim() ? 0.6 : 1 }}>
+          {aiLoading ? 'Thinking...' : '✨ Ask'}
+        </button>
+        {aiSummary && (
+          <button type="button" onClick={clearAiQuery}
+            style={{ background:'#f1f5f9', color:'#64748b', border:'none', borderRadius:'8px', padding:'0.55rem 0.75rem', fontSize:'0.875rem', cursor:'pointer', fontFamily:'inherit' }}>✕</button>
+        )}
+      </form>
+      {aiSummary && (
+        <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.6rem 0.9rem', marginBottom:'1rem', borderRadius:'8px', fontSize:'0.8rem', fontFamily:'inherit', background: aiUnderstood ? '#eef2ff' : '#fef2f2', color: aiUnderstood ? '#3730a3' : '#991b1b', border: `1px solid ${aiUnderstood ? '#c7d2fe' : '#fecaca'}` }}>
+          <span>{aiUnderstood ? '✨' : '⚠️'}</span>
+          <span>{aiSummary}</span>
+        </div>
+      )}
 
       {/* Filters */}
       <div style={{ display:'flex', gap:'0.75rem', marginBottom:'1rem', flexWrap:'wrap' }}>

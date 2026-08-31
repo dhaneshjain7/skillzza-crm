@@ -93,6 +93,7 @@ const schoolSchema = new mongoose.Schema(
     studentDataReceived:  { type: String, enum: ['Yes', 'No'], default: 'No' },
     teachersDataReceived: { type: String, enum: ['Yes', 'No'], default: 'No' },
     hackathonRegistered:  { type: String, enum: ['Yes', 'No'], default: 'No' },
+    cpdTrainingDone:      { type: String, enum: ['Yes', 'No'], default: 'No' },
 
     // ── Teachers Activity — per-teacher CPD/DCAIS tracking, Admin/SuperAdmin only ──
     teachersActivity: [

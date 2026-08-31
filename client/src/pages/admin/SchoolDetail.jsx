@@ -28,6 +28,7 @@ const ACTIVITY_FIELDS = [
   { name: 'teachersDataReceived', label: 'Teachers Data Received' },
   { name: 'hackathonRegistered',  label: 'Hackathon Participated' },
   { name: 'poeSubmitted',         label: 'POE Recived' },
+  { name: 'cpdTrainingDone',      label: 'CPD Training Done' },
 ];
 
 const QUARTERS = ['q1', 'q2', 'q3', 'q4'];
@@ -253,6 +254,7 @@ const SchoolDetail = () => {
       teachersDataReceived: s.teachersDataReceived || 'No',
       hackathonRegistered:  s.hackathonRegistered  || 'No',
       poeSubmitted:         s.poeSubmitted         || 'No',
+      cpdTrainingDone:      s.cpdTrainingDone      || 'No',
     });
   };
 
@@ -839,6 +841,12 @@ const SchoolDetail = () => {
                   onChange={e => setActivityForm(a => ({ ...a, [f.name]: e.target.value }))}
                   options={['Yes', 'No']} />
               ))}
+            </Row>
+            <Row>
+              <SelectField label={ACTIVITY_FIELDS[6].label} name={ACTIVITY_FIELDS[6].name} value={activityForm[ACTIVITY_FIELDS[6].name]}
+                onChange={e => setActivityForm(a => ({ ...a, [ACTIVITY_FIELDS[6].name]: e.target.value }))}
+                options={['Yes', 'No']} />
+              <div />
             </Row>
             <div style={{ display:'flex', gap:'0.75rem', justifyContent:'flex-end', paddingTop:'1rem', borderTop:'1px solid #f1f5f9' }}>
               <button type="submit" disabled={savingActivity} style={{ ...saveBtn, opacity: savingActivity ? 0.7 : 1 }}>

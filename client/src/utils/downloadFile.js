@@ -1,3 +1,17 @@
+// Fetches a document's raw bytes for in-page rendering (image/PDF/DOCX preview) —
+// unlike downloadFile, this doesn't trigger a save-to-disk, it just returns the Blob.
+export const fetchDocumentBlob = async (documentId) => {
+  const token = localStorage.getItem('accessToken');
+  const url   = `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/documents/${documentId}/download`;
+
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
+  return res.blob();
+};
+
 const downloadFile = async (documentId, fileName) => {
   try {
     const token = localStorage.getItem('accessToken');
