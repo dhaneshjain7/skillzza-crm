@@ -11,6 +11,7 @@ const {
   getSchools,
   getSchoolById,
   updateSchool,
+  deleteSchool,
   uploadLogo,
   updateSchoolStatus,
   assignAdmin,
@@ -68,6 +69,9 @@ router.put('/:id/assign-admin', isSuperAdmin, assignAdmin);
 
 // ── Archive (SuperAdmin only) ─────────────────────────────────────────────────
 router.put('/:id/archive', isSuperAdmin, archiveSchool);
+
+// ── Delete (SuperAdmin only) — soft-delete, hidden from every normal query ────
+router.delete('/:id', isSuperAdmin, deleteSchool);
 
 // ── History & audit ───────────────────────────────────────────────────────────
 router.get('/:id/status-history', canAccessSchool, getStatusHistory);

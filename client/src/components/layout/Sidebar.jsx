@@ -16,6 +16,7 @@ const NAV = {
     { label: 'Dashboard',     path: '/admin/dashboard',  icon: '▦' },
     { label: 'My Schools',    path: '/admin/schools',    icon: '⊞' },
     { label: 'Messages',      path: '/admin/messages',   icon: '◉' },
+    { label: 'Activity',      path: '/admin/activity',   icon: '📌' },
     { label: 'Reports',       path: '/admin/reports',    icon: '◫' },
     { label: 'Activity Logs', path: '/admin/logs',       icon: '≡' },
   ],

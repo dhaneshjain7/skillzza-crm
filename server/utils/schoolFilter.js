@@ -3,7 +3,7 @@
 // AI natural-language query endpoint, so the LLM path can never touch fields or values
 // outside exactly what the UI already allows.
 
-const ACTIVITY_FIELDS = ['loiReceived', 'dcaisConfirmation', 'studentDataReceived', 'teachersDataReceived', 'hackathonRegistered', 'poeSubmitted', 'cpdTrainingDone'];
+const ACTIVITY_FIELDS = ['loiReceived', 'dcaisConfirmation', 'studentDataReceived', 'teachersDataReceived', 'hackathonRegistered', 'poeSubmitted', 'cpdTrainingDone', 'aiPlaygroundDone', 'skillsStudioDone'];
 
 const SCHOOL_STATUSES = [
   'New', 'Contacted', 'LOI Pending', 'LOI Received', 'Verification',

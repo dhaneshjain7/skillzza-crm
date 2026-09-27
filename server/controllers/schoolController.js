@@ -3,6 +3,7 @@ const { School, SchoolStatusHistory, AuditLog, ActivityLog, User } = require('..
 const { notifyStatusUpdate, notifyAdminAssigned, notifyPasswordChanged } = require('../utils/notificationService');
 const { parseFile, validateAgainstSchema, STUDENTS_ACTIVITY_SCHEMA, TEACHERS_ACTIVITY_SCHEMA, SCHOOLS_BULK_SCHEMA } = require('../utils/fileParser');
 const { buildSchoolFilter } = require('../utils/schoolFilter');
+const { attachHealthScores } = require('../utils/healthScore');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -244,58 +245,60 @@ const importSchoolsBulk = async (req, res) => {
       const r = validation.rows[i];
       const rowNum = r.__rowNum;
       const schoolName = (r['School Name'] || '').trim();
-      const email       = (r['Email'] || '').trim().toLowerCase();
+      const email       = (r['Email'] || '').trim().toLowerCase(); // optional — '' if not given
 
       try {
-        const existingSchool = await School.findOne({ email });
-        if (existingSchool) {
-          skipped.push({ row: rowNum, schoolName, reason: 'A school with this email already exists.' });
-          continue;
-        }
-        const existingUser = await User.findOne({ email });
-        if (existingUser) {
-          skipped.push({ row: rowNum, schoolName, reason: 'A user account with this email already exists.' });
-          continue;
+        // Only dedupe on email when one was actually provided — an empty string
+        // isn't a real email to collide on.
+        if (email) {
+          const existingSchool = await School.findOne({ email });
+          if (existingSchool) {
+            skipped.push({ row: rowNum, schoolName, reason: 'A school with this email already exists.' });
+            continue;
+          }
+          const existingUser = await User.findOne({ email });
+          if (existingUser) {
+            skipped.push({ row: rowNum, schoolName, reason: 'A user account with this email already exists.' });
+            continue;
+          }
         }
 
         const school = await School.create({
           schoolName,
-          email,
-          phone:       (r['Phone'] || '').trim(),
-          altPhone:    (r['Alt Phone'] || '').trim(),
-          website:     (r['Website'] || '').trim(),
-          board:       (r['Board'] || '').trim(),
-          schoolType:  (r['School Type'] || '').trim() || undefined,
+          email:       email || undefined,
+          phone:       (r['Phone'] || '').trim() || undefined,
+          board:       (r['Board (CBSE/ICSE/IB/SB)'] || '').trim(),
           udiseCode:   (r['UDISE Code'] || '').trim(),
-          studentCount: r['Student Count'] ? Number(r['Student Count']) : undefined,
-          staffCount:   r['Staff Count']   ? Number(r['Staff Count'])   : undefined,
+          studentCount: r['Student Count (6-12)'] ? Number(r['Student Count (6-12)']) : undefined,
+          staffCount:   r['Teacher Count (6-12)']  ? Number(r['Teacher Count (6-12)'])  : undefined,
           address: {
-            street:   (r['Street'] || '').trim(),
-            city:     (r['City'] || '').trim(),
-            district: (r['District'] || '').trim(),
-            state:    (r['State'] || '').trim(),
-            pincode:  (r['Pincode'] || '').trim(),
+            city:  (r['City/ District'] || '').trim(),
+            state: (r['STATE'] || '').trim(),
           },
-          principal: {
-            name:  (r['Principal Name'] || '').trim(),
-            email: (r['Principal Email'] || '').trim(),
-            phone: (r['Principal Phone'] || '').trim(),
-          },
+          spoc:      (r['SPOC Name'] || '').trim(),
+          spocPhone: (r['SPOC Mobile'] || '').trim(),
+          spocEmail: (r['SPOC Email'] || '').trim(),
           assignedAdmin: null,
           currentStatus: 'New',
         });
 
-        const password = randomPassword();
-        const schoolUser = await User.create({
-          name:     schoolName,
-          email,
-          password,
-          role:     'school_user',
-          phone:    (r['Phone'] || '').trim(),
-          isActive: true,
-        });
-        school.schoolUser = schoolUser._id;
-        await school.save();
+        // A portal login needs a real email to use as the username — schools
+        // imported without one simply don't get one yet; an admin can add it
+        // later via the existing "create login" action.
+        let password = null;
+        if (email) {
+          password = randomPassword();
+          const schoolUser = await User.create({
+            name:     schoolName,
+            email,
+            password,
+            role:     'school_user',
+            phone:    (r['Phone'] || '').trim(),
+            isActive: true,
+          });
+          school.schoolUser = schoolUser._id;
+          await school.save();
+        }
 
         await SchoolStatusHistory.create({
           school:        school._id,
@@ -314,7 +317,7 @@ const importSchoolsBulk = async (req, res) => {
           req,
         });
 
-        created.push({ row: rowNum, schoolName, schoolId: school._id, loginEmail: email, password });
+        created.push({ row: rowNum, schoolName, schoolId: school._id, loginEmail: email || null, password });
       } catch (rowErr) {
         skipped.push({ row: rowNum, schoolName, reason: rowErr.message || 'Failed to create school.' });
       }
@@ -363,13 +366,15 @@ const getSchools = async (req, res) => {
       School.countDocuments(filter),
     ]);
 
+    const schoolsWithHealth = await attachHealthScores(schools);
+
     res.status(200).json({
       success: true,
       total,
       page:       Number(page),
       totalPages: Math.ceil(total / Number(limit)),
       count:      schools.length,
-      schools,
+      schools: schoolsWithHealth,
     });
   } catch (err) {
     console.error('getSchools error:', err);
@@ -389,7 +394,9 @@ const getSchoolById = async (req, res) => {
       return res.status(404).json({ success: false, message: 'School not found.' });
     }
 
-    res.status(200).json({ success: true, school });
+    const [schoolWithHealth] = await attachHealthScores([school]);
+
+    res.status(200).json({ success: true, school: schoolWithHealth });
   } catch (err) {
     console.error('getSchoolById error:', err);
     res.status(500).json({ success: false, message: 'Server error.' });
@@ -429,6 +436,94 @@ const updateSchool = async (req, res) => {
       }
     });
 
+    // ── Business-rule validation ────────────────────────────────────────────────
+    // UDISE Code: exactly 11 digits, and unique across schools — a genuine data-
+    // integrity rule, so it applies to whoever edits it (school_user, admin, or
+    // superadmin), not just the self-service form.
+    if (req.body.udiseCode !== undefined) {
+      const udise = String(req.body.udiseCode).trim();
+      if (!/^\d{11}$/.test(udise)) {
+        return res.status(400).json({ success: false, message: 'UDISE Code must be exactly 11 digits.' });
+      }
+      const duplicate = await School.findOne({ udiseCode: udise, _id: { $ne: school._id } }).select('schoolName');
+      if (duplicate) {
+        return res.status(400).json({ success: false, message: `UDISE Code ${udise} is already used by another school (${duplicate.schoolName}).` });
+      }
+      req.body.udiseCode = udise;
+    }
+
+    // School Phone / SPOC Phone: exactly 10 digits, whenever a non-empty value
+    // is being set.
+    if (req.body.phone !== undefined && String(req.body.phone).trim() !== '') {
+      if (!/^\d{10}$/.test(String(req.body.phone).trim())) {
+        return res.status(400).json({ success: false, message: 'School Phone must be exactly 10 digits.' });
+      }
+    }
+    if (req.body.spocPhone !== undefined && String(req.body.spocPhone).trim() !== '') {
+      if (!/^\d{10}$/.test(String(req.body.spocPhone).trim())) {
+        return res.status(400).json({ success: false, message: 'SPOC Phone must be exactly 10 digits.' });
+      }
+    }
+
+    // A "profile save" is any request that includes "schoolName" — that's how
+    // the actual Edit Profile forms (school self-service AND admin/superadmin's
+    // School Detail page) always submit, as opposed to the SEPARATE inline
+    // "edit table + Save" flow for Students/Teachers Activity, which PUTs to
+    // this same endpoint with only {studentsActivity: [...]} and must NEVER be
+    // blocked by profile-field requirements it never touches.
+    const isProfileSave = req.body.schoolName !== undefined;
+
+    if (isProfileSave) {
+      // Required on EVERY role's profile save — school_user, admin, and
+      // superadmin alike now share the exact same required-fields rule, so the
+      // admin/superadmin School Detail page behaves identically to the school's
+      // own self-service form (the two intentional exceptions — POE Submitted
+      // and CPD Training Level — are admin-only fields the school's own form
+      // never shows, and stay optional/role-specific as before).
+      const requiredFields = [
+        ['schoolName', 'School Name'], ['udiseCode', 'UDISE Code'],
+        ['spoc', 'School SPOC'], ['spocPhone', 'SPOC Phone'], ['spocEmail', 'SPOC Email'],
+        ['email', 'School Email'], ['phone', 'School Phone'],
+        ['board', 'Board'],
+      ];
+      const missing = requiredFields
+        .filter(([key]) => !String(req.body[key] ?? school[key] ?? '').trim())
+        .map(([, label]) => label);
+      if (unset.schoolType || !String(req.body.schoolType ?? school.schoolType ?? '').trim()) missing.push('School Type');
+      const studentCountVal = req.body.studentCount ?? school.studentCount;
+      if (studentCountVal === undefined || studentCountVal === null || studentCountVal === '') missing.push('Student Count');
+      const staffCountVal = req.body.staffCount ?? school.staffCount;
+      if (staffCountVal === undefined || staffCountVal === null || staffCountVal === '') missing.push('Staff Count');
+      if (!String(req.body.address?.city ?? school.address?.city ?? '').trim()) missing.push('City');
+      if (!String(req.body.address?.state ?? school.address?.state ?? '').trim()) missing.push('State');
+      if (missing.length) {
+        return res.status(400).json({ success: false, message: `${missing.join(', ')} ${missing.length > 1 ? 'are' : 'is'} required.` });
+      }
+    }
+
+    // This endpoint also handles the inline "edit table + Save" flow for Students/
+    // Teachers Activity (as opposed to the separate bulk-import endpoints), which
+    // replaces the whole array wholesale. Since it's the only other place these
+    // arrays get written, stamp "importedAt" here too — new rows (no _id yet) or
+    // rows whose quarterly flags actually changed count as submitted right now;
+    // untouched existing rows keep whatever "importedAt" they already had, so a
+    // save that only edits one student doesn't fake a "submitted today" for others.
+    const stampActivityDates = (incoming, existing, quarterlyField) => {
+      const existingById = new Map((existing || []).map(e => [String(e._id), e]));
+      return incoming.map((row) => {
+        const prior = row._id ? existingById.get(String(row._id)) : null;
+        if (!prior) return { ...row, importedAt: new Date() };
+        const changed = JSON.stringify(prior[quarterlyField] || {}) !== JSON.stringify(row[quarterlyField] || {});
+        return { ...row, importedAt: changed ? new Date() : prior.importedAt };
+      });
+    };
+    if (Array.isArray(req.body.studentsActivity)) {
+      req.body.studentsActivity = stampActivityDates(req.body.studentsActivity, school.studentsActivity, 'mauQuarterly');
+    }
+    if (Array.isArray(req.body.teachersActivity)) {
+      req.body.teachersActivity = stampActivityDates(req.body.teachersActivity, school.teachersActivity, 'cpdQuarterly');
+    }
+
     // Track changes for audit
     const changes = {};
     Object.keys(req.body).forEach((key) => {
@@ -462,7 +557,8 @@ const updateSchool = async (req, res) => {
       req,
     });
 
-    res.status(200).json({ success: true, school: updated });
+    const [updatedWithHealth] = await attachHealthScores([updated]);
+    res.status(200).json({ success: true, school: updatedWithHealth });
   } catch (err) {
     console.error('updateSchool error:', err);
     if (err.name === 'ValidationError') {
@@ -488,10 +584,65 @@ const uploadLogo = async (req, res) => {
     school.logo = `/uploads/logos/${req.file.filename}`;
     await school.save();
 
-    res.status(200).json({ success: true, school });
+    const [schoolWithHealth] = await attachHealthScores([school]);
+    res.status(200).json({ success: true, school: schoolWithHealth });
   } catch (err) {
     console.error('uploadLogo error:', err);
     res.status(500).json({ success: false, message: 'Server error while uploading logo.' });
+  }
+};
+
+// ── @DELETE /api/schools/:id ──────────────────────────────────────────────────
+// SuperAdmin ONLY — soft-deletes a school. The softDelete plugin's find-hooks
+// then exclude it from every normal query app-wide (lists, search, analytics,
+// AI queries), so it behaves as fully removed from the product — but nothing
+// is actually erased at the database level, so it stays recoverable if ever
+// needed, even though no "restore" UI is exposed for it. If the school has a
+// portal login, that account is deactivated AND its email is freed (renamed
+// off to the side) — deactivating alone leaves the original email sitting on
+// a live User document, and User.email has a hard unique index at the
+// database level, so any later attempt to re-import/re-create that same
+// school with the same email would fail with "a user account with this email
+// already exists", even though the old account is inert. Renaming it out of
+// the way is what actually makes the email reusable again.
+const deleteSchool = async (req, res) => {
+  try {
+    const school = await School.findById(req.params.id);
+    if (!school) {
+      return res.status(404).json({ success: false, message: 'School not found.' });
+    }
+
+    await school.softDelete(req.user._id);
+
+    if (school.schoolUser) {
+      const linkedUser = await User.findById(school.schoolUser);
+      if (linkedUser) {
+        linkedUser.isActive = false;
+        linkedUser.email = `deleted-${Date.now()}-${linkedUser.email}`;
+        await linkedUser.softDelete(req.user._id); // sets isDeleted/deletedAt/deletedBy and saves
+      }
+    }
+
+    await logAudit({
+      school:       school._id,
+      eventType:    'School Deleted',
+      performedBy:  req.user,
+      description:  `School "${school.schoolName}" deleted by ${req.user.name || req.user.email}`,
+      req,
+    });
+
+    await logActivity({
+      user:          req.user,
+      action:        'School Deleted',
+      description:   `Deleted school: ${school.schoolName}`,
+      relatedSchool: school._id,
+      req,
+    });
+
+    res.status(200).json({ success: true, message: 'School deleted successfully.' });
+  } catch (err) {
+    console.error('deleteSchool error:', err);
+    res.status(500).json({ success: false, message: 'Server error while deleting school.' });
   }
 };
 
@@ -690,11 +841,12 @@ const assignAdmin = async (req, res) => {
 
     const updated = await School.findById(school._id)
       .populate('assignedAdmin', 'name email phone');
+    const [updatedWithHealth] = await attachHealthScores([updated]);
 
     res.status(200).json({
       success: true,
       message: `Admin "${admin.name}" assigned to "${school.schoolName}"`,
-      school:  updated,
+      school:  updatedWithHealth,
     });
   } catch (err) {
     console.error('assignAdmin error:', err);
@@ -1059,12 +1211,14 @@ const importStudentsActivity = async (req, res) => {
     }
 
     const toBool = (v) => ['yes', 'y', 'true', '1'].includes(String(v ?? '').trim().toLowerCase());
+    const importTimestamp = new Date();
 
     const newStudents = validation.rows.map(r => ({
       name:       r['Student Name'] || '',
       class:      r['Class']        || '',
       section:    r['Section']      || '',
       fiscalYear: r['Fiscal Year']  || '',
+      importedAt: importTimestamp,
       mauQuarterly: {
         q1: toBool(r['MAU Q1']), q2: toBool(r['MAU Q2']), q3: toBool(r['MAU Q3']), q4: toBool(r['MAU Q4']),
       },
@@ -1073,9 +1227,14 @@ const importStudentsActivity = async (req, res) => {
         may: toBool(r['DCAIS May']), jun: toBool(r['DCAIS Jun']), jul: toBool(r['DCAIS Jul']), aug: toBool(r['DCAIS Aug']),
         sep: toBool(r['DCAIS Sep']), oct: toBool(r['DCAIS Oct']), nov: toBool(r['DCAIS Nov']), dec: toBool(r['DCAIS Dec']),
       },
-      hackathonParticipated: toBool(r['Annual Hackathon Participated']),
+      hackathonParticipated:    toBool(r['Annual Hackathon Participated']),
+      aiPlaygroundParticipated: toBool(r['AI Playground']),
+      skillsStudioParticipated: toBool(r['Skills Studio']),
+      adobeIdCreated:           toBool(r['Adobe ID Created']),
+      adobeIdActivated:         toBool(r['Adobe ID Activated']),
       certificateReceived:   toBool(r['Certificate Received']),
       certificateLink:       r['Certificate Link'] || '',
+      remarks:                r['Remarks'] || '',
     }));
 
     school.studentsActivity.push(...newStudents);
@@ -1168,10 +1327,12 @@ const importTeachersActivity = async (req, res) => {
     }
 
     const toBool = (v) => ['yes', 'y', 'true', '1'].includes(String(v ?? '').trim().toLowerCase());
+    const importTimestamp = new Date();
 
     const newTeachers = validation.rows.map(r => ({
       name:       r['Teacher Name'] || '',
       fiscalYear: r['Fiscal Year']  || '',
+      importedAt: importTimestamp,
       cpdQuarterly: {
         q1: toBool(r['CPD Q1']), q2: toBool(r['CPD Q2']), q3: toBool(r['CPD Q3']), q4: toBool(r['CPD Q4']),
       },
@@ -1182,6 +1343,7 @@ const importTeachersActivity = async (req, res) => {
       },
       certificateReceived: toBool(r['Certificate Received']),
       certificateLink:     r['Certificate Link'] || '',
+      remarks:             r['Remarks'] || '',
     }));
 
     school.teachersActivity.push(...newTeachers);
@@ -1225,6 +1387,7 @@ module.exports = {
   getSchools,
   getSchoolById,
   updateSchool,
+  deleteSchool,
   uploadLogo,
   updateSchoolStatus,
   assignAdmin,

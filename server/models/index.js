@@ -13,6 +13,8 @@ const RefreshToken        = require('./RefreshToken');
 const Role                = require('./Role');
 const Permission          = require('./Permission');
 const Settings            = require('./Settings');
+const AdminScoreHistory   = require('./AdminScoreHistory');
+const DailyMetricSnapshot = require('./DailyMetricSnapshot');
 
 module.exports = {
   User,
@@ -27,4 +29,6 @@ module.exports = {
   Role,
   Permission,
   Settings,
+  AdminScoreHistory,
+  DailyMetricSnapshot,
 };

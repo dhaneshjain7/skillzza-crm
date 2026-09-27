@@ -56,14 +56,24 @@ const SCHEMAS = {
     label: 'Student Data',
     // NOTE: "Skillzza UID" removed from required fields per user request —
     // it's still accepted/normalised if present, just no longer mandatory.
+    // Column layout matches the school's own reference template — School
+    // City/District/State as separate columns (not the old combined "School
+    // City,State"), plus Year, and Email as an explicitly optional column.
+    columns: [
+      'First Name', 'Last Name', 'Grade', 'Section', 'School Name', 'School City',
+      'UDISE Code', 'Year', 'District', 'State', 'E-mail ID (Optional)',
+    ],
     required: [
       'First Name',
       'Last Name',
       'Grade',
       'Section',
       'School Name',
-      'School City,State',
+      'School City',
       'UDISE Code',
+      'Year',
+      'District',
+      'State',
     ],
     aliases: {
       'first name':        'First Name',
@@ -77,24 +87,40 @@ const SCHEMAS = {
       'uid':               'Skillzza UID',
       'skillzzauid':       'Skillzza UID',
       'school name':       'School Name',
-      'school city,state': 'School City,State',
-      'school city state': 'School City,State',
-      'city,state':        'School City,State',
+      'school city':       'School City',
+      'city':              'School City',
       'udise code':        'UDISE Code',
       'udise':             'UDISE Code',
+      'year':              'Year',
+      'district':          'District',
+      'state':             'State',
+      'e-mail id (optional)': 'E-mail ID (Optional)',
+      'e-mail id(optional)':  'E-mail ID (Optional)',
+      'email id (optional)':  'E-mail ID (Optional)',
+      'email id(optional)':   'E-mail ID (Optional)',
+      'e-mail id':         'E-mail ID (Optional)',
+      'email id':          'E-mail ID (Optional)',
+      'email':             'E-mail ID (Optional)',
     },
     validators: {
       'UDISE Code': (v) => /^\d{11}$/.test(String(v).trim()) || 'UDISE Code must be 11 digits',
+      'E-mail ID (Optional)': (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v).trim()) || 'Invalid email format',
       // Grade range check removed per user request — any value is now accepted
     },
   },
 
   teacher_data: {
     label: 'Teacher Data',
+    // Email moved to last and made optional per user request — mirrors the
+    // same "E-mail ID (Optional)" treatment already used for student_data
+    // above: still accepted/normalised and format-checked if present, just
+    // no longer required for a row to be valid.
+    columns: [
+      'First Name', 'Last Name', 'School Name', 'School City', 'UDISE Code', 'E-mail ID (Optional)',
+    ],
     required: [
       'First Name',
       'Last Name',
-      'Email ID',
       'School Name',
       'School City',
       'UDISE Code',
@@ -104,19 +130,24 @@ const SCHEMAS = {
       'firstname':      'First Name',
       'last name':      'Last Name',
       'lastname':       'Last Name',
-      'email id':       'Email ID',
-      'email':          'Email ID',
-      'teacher email':  'Email ID',
-      'teacher email id':'Email ID',
       'school name':    'School Name',
       'school city':    'School City',
       'city':           'School City',
       'udise code':     'UDISE Code',
       'udise':          'UDISE Code',
+      'e-mail id (optional)': 'E-mail ID (Optional)',
+      'e-mail id(optional)':  'E-mail ID (Optional)',
+      'email id (optional)':  'E-mail ID (Optional)',
+      'email id(optional)':   'E-mail ID (Optional)',
+      'e-mail id':      'E-mail ID (Optional)',
+      'email id':       'E-mail ID (Optional)',
+      'email':          'E-mail ID (Optional)',
+      'teacher email':  'E-mail ID (Optional)',
+      'teacher email id': 'E-mail ID (Optional)',
     },
     validators: {
       'UDISE Code': (v) => /^\d{11}$/.test(String(v).trim()) || 'UDISE Code must be 11 digits',
-      'Email ID':   (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v).trim()) || 'Invalid email format',
+      'E-mail ID (Optional)': (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v).trim()) || 'Invalid email format',
     },
   },
 
@@ -341,9 +372,10 @@ const STUDENTS_ACTIVITY_SCHEMA = {
   columns: [
     'Student Name', 'Class', 'Section', 'Fiscal Year',
     'MAU Q1', 'MAU Q2', 'MAU Q3', 'MAU Q4',
-    'DCAIS Jan', 'DCAIS Feb', 'DCAIS Mar', 'DCAIS Apr', 'DCAIS May', 'DCAIS Jun',
-    'DCAIS Jul', 'DCAIS Aug', 'DCAIS Sep', 'DCAIS Oct', 'DCAIS Nov', 'DCAIS Dec',
-    'Annual Hackathon Participated', 'Certificate Received', 'Certificate Link',
+    // Fiscal year order (Apr-Mar), matching MAU quarters and the rest of the app.
+    'DCAIS Apr', 'DCAIS May', 'DCAIS Jun', 'DCAIS Jul', 'DCAIS Aug', 'DCAIS Sep',
+    'DCAIS Oct', 'DCAIS Nov', 'DCAIS Dec', 'DCAIS Jan', 'DCAIS Feb', 'DCAIS Mar',
+    'Annual Hackathon Participated', 'AI Playground', 'Skills Studio', 'Adobe ID Created', 'Adobe ID Activated', 'Certificate Received', 'Certificate Link', 'Remarks',
   ],
   aliases: {
     'student name': 'Student Name',
@@ -361,8 +393,13 @@ const STUDENTS_ACTIVITY_SCHEMA = {
     'sep': 'DCAIS Sep', 'oct': 'DCAIS Oct', 'nov': 'DCAIS Nov', 'dec': 'DCAIS Dec',
     'annual hackathon participated': 'Annual Hackathon Participated',
     'hackathon participated':        'Annual Hackathon Participated',
+    'ai playground':                 'AI Playground',
+    'skills studio':                 'Skills Studio',
+    'adobe id created':              'Adobe ID Created',
+    'adobe id activated':            'Adobe ID Activated',
     'certificate received': 'Certificate Received',
     'certificate link':     'Certificate Link',
+    'remarks':              'Remarks',
   },
 };
 
@@ -373,9 +410,10 @@ const TEACHERS_ACTIVITY_SCHEMA = {
   columns: [
     'Teacher Name', 'Fiscal Year',
     'CPD Q1', 'CPD Q2', 'CPD Q3', 'CPD Q4',
-    'DCAIS Jan', 'DCAIS Feb', 'DCAIS Mar', 'DCAIS Apr', 'DCAIS May', 'DCAIS Jun',
-    'DCAIS Jul', 'DCAIS Aug', 'DCAIS Sep', 'DCAIS Oct', 'DCAIS Nov', 'DCAIS Dec',
-    'Certificate Received', 'Certificate Link',
+    // Fiscal year order (Apr-Mar), matching CPD quarters and the rest of the app.
+    'DCAIS Apr', 'DCAIS May', 'DCAIS Jun', 'DCAIS Jul', 'DCAIS Aug', 'DCAIS Sep',
+    'DCAIS Oct', 'DCAIS Nov', 'DCAIS Dec', 'DCAIS Jan', 'DCAIS Feb', 'DCAIS Mar',
+    'Certificate Received', 'Certificate Link', 'Remarks',
   ],
   aliases: {
     'teacher name': 'Teacher Name',
@@ -391,50 +429,62 @@ const TEACHERS_ACTIVITY_SCHEMA = {
     'sep': 'DCAIS Sep', 'oct': 'DCAIS Oct', 'nov': 'DCAIS Nov', 'dec': 'DCAIS Dec',
     'certificate received': 'Certificate Received',
     'certificate link':     'Certificate Link',
+    'remarks':              'Remarks',
   },
 };
 
 // ── Bulk import schema for creating many Schools at once (Admin/SuperAdmin only) ──
-// School Name/UDISE/Email/Phone/City/State are required — same as the single "Add School"
-// form (School.address.city and address.state are `required: true` on the model).
+// Column layout matches the school's own reference template. Email and Phone are
+// intentionally NOT required — a school created without an email simply doesn't
+// get a portal login yet (see importSchoolsBulk), one can be added later.
 const SCHOOLS_BULK_SCHEMA = {
   label: 'Schools',
-  required: ['School Name', 'UDISE Code', 'Email', 'Phone', 'City', 'State'],
   columns: [
-    'School Name', 'UDISE Code', 'Email', 'Phone', 'Alt Phone', 'Website',
-    'Board', 'School Type', 'Student Count', 'Staff Count',
-    'Street', 'City', 'District', 'State', 'Pincode',
-    'Principal Name', 'Principal Email', 'Principal Phone',
+    'School Name', 'City/ District', 'STATE', 'UDISE Code', 'Email', 'Phone',
+    'Board (CBSE/ICSE/IB/SB)', 'Student Count (6-12)', 'Teacher Count (6-12)',
+    'SPOC Name', 'SPOC Mobile', 'SPOC Email',
+  ],
+  required: [
+    'School Name', 'City/ District', 'STATE', 'UDISE Code',
+    'Board (CBSE/ICSE/IB/SB)', 'Student Count (6-12)', 'Teacher Count (6-12)',
+    'SPOC Name', 'SPOC Mobile', 'SPOC Email',
   ],
   aliases: {
-    'school name':      'School Name',
-    'name':             'School Name',
-    'udise code':       'UDISE Code',
-    'udise':            'UDISE Code',
-    'email':            'Email',
-    'school email':     'Email',
-    'phone':            'Phone',
-    'school phone':     'Phone',
-    'alt phone':        'Alt Phone',
-    'website':          'Website',
-    'board':            'Board',
-    'school type':      'School Type',
-    'student count':    'Student Count',
-    'staff count':      'Staff Count',
-    'street':           'Street',
-    'street address':   'Street',
-    'city':             'City',
-    'district':         'District',
-    'state':            'State',
-    'pincode':          'Pincode',
-    'pin code':         'Pincode',
-    'principal name':   'Principal Name',
-    'principal email':  'Principal Email',
-    'principal phone':  'Principal Phone',
+    'school name':                  'School Name',
+    'name':                         'School Name',
+    'city/ district':               'City/ District',
+    'city/district':                'City/ District',
+    'city district':                'City/ District',
+    'district':                     'City/ District',
+    'city':                         'City/ District',
+    'state':                        'STATE',
+    'udise code':                   'UDISE Code',
+    'udise':                        'UDISE Code',
+    'email':                        'Email',
+    'school email':                 'Email',
+    'phone':                        'Phone',
+    'school phone':                 'Phone',
+    'board (cbse/icse/ib/sb)':      'Board (CBSE/ICSE/IB/SB)',
+    'board (cbse/icse/ib/ sb)':     'Board (CBSE/ICSE/IB/SB)',
+    'board':                        'Board (CBSE/ICSE/IB/SB)',
+    'student count (6-12)':         'Student Count (6-12)',
+    'student count':                'Student Count (6-12)',
+    'students':                     'Student Count (6-12)',
+    'teacher count (6-12)':         'Teacher Count (6-12)',
+    'teacher count':                'Teacher Count (6-12)',
+    'teachers':                     'Teacher Count (6-12)',
+    'staff count':                  'Teacher Count (6-12)',
+    'spoc name':                    'SPOC Name',
+    'spoc mobile':                  'SPOC Mobile',
+    'spoc phone':                   'SPOC Mobile',
+    'spoc email':                   'SPOC Email',
   },
   validators: {
     'UDISE Code': (v) => /^\d{11}$/.test(String(v).trim()) || 'UDISE Code must be 11 digits',
     'Email':      (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v).trim()) || 'Invalid email format',
+    'SPOC Email': (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v).trim()) || 'Invalid email format',
+    'Student Count (6-12)': (v) => !isNaN(Number(v)) || 'Must be a number',
+    'Teacher Count (6-12)': (v) => !isNaN(Number(v)) || 'Must be a number',
   },
 };
 

@@ -343,7 +343,9 @@ const downloadTemplate = (req, res) => {
     }
 
     const XLSX = require('xlsx');
-    const ws = XLSX.utils.aoa_to_sheet([schema.required]);
+    // Prefer the full column layout (includes optional columns like Email) —
+    // falls back to just the required list for schemas that don't define one.
+    const ws = XLSX.utils.aoa_to_sheet([schema.columns || schema.required]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Template');
     const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });

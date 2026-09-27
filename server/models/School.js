@@ -29,8 +29,12 @@ const schoolSchema = new mongoose.Schema(
     spocEmail:         { type: String, trim: true },
 
     // ── Contact Details ────────────────────────────────────────────────────────
-    email:   { type: String, required: true, lowercase: true, trim: true },
-    phone:   { type: String, required: true, trim: true },
+    // Not required at the schema level — the single "Add School" form enforces
+    // these itself (schoolController.createSchool), while bulk import allows a
+    // school to be created without them (no portal login is created for that
+    // school until an email is added later).
+    email:   { type: String, lowercase: true, trim: true },
+    phone:   { type: String, trim: true },
     altPhone:{ type: String, trim: true },
 
     // ── Address ───────────────────────────────────────────────────────────────
@@ -94,12 +98,17 @@ const schoolSchema = new mongoose.Schema(
     teachersDataReceived: { type: String, enum: ['Yes', 'No'], default: 'No' },
     hackathonRegistered:  { type: String, enum: ['Yes', 'No'], default: 'No' },
     cpdTrainingDone:      { type: String, enum: ['Yes', 'No'], default: 'No' },
+    aiPlaygroundDone:     { type: String, enum: ['Yes', 'No'], default: 'No' },
+    skillsStudioDone:     { type: String, enum: ['Yes', 'No'], default: 'No' },
 
     // ── Teachers Activity — per-teacher CPD/DCAIS tracking, Admin/SuperAdmin only ──
     teachersActivity: [
       {
         name: { type: String, trim: true },
         fiscalYear: { type: String, trim: true },
+        // Stamped when this row is created via bulk import — lets us answer "who was
+        // submitted today", since the quarterly/monthly flags themselves carry no date.
+        importedAt: { type: Date },
         cpdQuarterly: {
           q1: { type: Boolean, default: false },
           q2: { type: Boolean, default: false },
@@ -122,6 +131,7 @@ const schoolSchema = new mongoose.Schema(
         },
         certificateReceived: { type: Boolean, default: false },
         certificateLink:     { type: String, trim: true },
+        remarks:             { type: String, trim: true },
       },
     ],
 
@@ -132,6 +142,9 @@ const schoolSchema = new mongoose.Schema(
         class:   { type: String, trim: true },
         section: { type: String, trim: true },
         fiscalYear: { type: String, trim: true },
+        // Stamped when this row is created via bulk import — lets us answer "who was
+        // submitted today", since the quarterly/monthly flags themselves carry no date.
+        importedAt: { type: Date },
         mauQuarterly: {
           q1: { type: Boolean, default: false },
           q2: { type: Boolean, default: false },
@@ -153,8 +166,13 @@ const schoolSchema = new mongoose.Schema(
           dec: { type: Boolean, default: false },
         },
         hackathonParticipated: { type: Boolean, default: false },
+        aiPlaygroundParticipated: { type: Boolean, default: false },
+        skillsStudioParticipated: { type: Boolean, default: false },
+        adobeIdCreated:   { type: Boolean, default: false }, // used by the DCAIS Health Score's Adobe ID component
+        adobeIdActivated: { type: Boolean, default: false },
         certificateReceived: { type: Boolean, default: false },
         certificateLink:     { type: String, trim: true },
+        remarks:             { type: String, trim: true },
       },
     ],
   },

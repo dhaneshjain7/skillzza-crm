@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../../components/layout/Layout';
 import StatusBadge from '../../components/common/StatusBadge';
+import HealthBadge from '../../components/common/HealthBadge';
+import AnalyticsQueryPanel from '../../components/common/AnalyticsQueryPanel';
 import API from '../../api/axios';
 
 const AdminsPage = () => {
@@ -52,6 +54,9 @@ const AdminsPage = () => {
         </button>
       </div>
 
+      {/* AI Analytics Q&A + BI Dashboards — read-only over the whole platform */}
+      <AnalyticsQueryPanel />
+
       {/* Search */}
       <form onSubmit={handleSearch} style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', maxWidth: '400px' }}>
         <input type="text" placeholder="Search by name or email..." value={searchIn} onChange={e => setSearchIn(e.target.value)}
@@ -70,7 +75,8 @@ const AdminsPage = () => {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))', gap: '1rem' }}>
           {admins.map(admin => (
-            <div key={admin._id} style={card}>
+            <div key={admin._id} onClick={() => navigate(`/superadmin/admins/${admin._id}/activity`)}
+              title="View activity" style={{ ...card, cursor: 'pointer' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '1rem' }}>
                 <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: '#e8f0f9', color: '#1e3a5f', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '1.1rem', flexShrink: 0 }}>
                   {admin.name[0].toUpperCase()}
@@ -80,9 +86,12 @@ const AdminsPage = () => {
                   <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{admin.email}</div>
                   {admin.phone && <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{admin.phone}</div>}
                 </div>
-                <span style={{ fontSize: '0.68rem', fontWeight: '700', padding: '3px 8px', borderRadius: '10px', background: admin.isActive ? '#d1fae5' : '#fee2e2', color: admin.isActive ? '#065f46' : '#991b1b', flexShrink: 0 }}>
-                  {admin.isActive ? 'Active' : 'Inactive'}
-                </span>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '5px', flexShrink: 0 }}>
+                  <span style={{ fontSize: '0.68rem', fontWeight: '700', padding: '3px 8px', borderRadius: '10px', background: admin.isActive ? '#d1fae5' : '#fee2e2', color: admin.isActive ? '#065f46' : '#991b1b' }}>
+                    {admin.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                  {admin.scorecard?.score != null && <HealthBadge health={admin.scorecard} size="sm" />}
+                </div>
               </div>
 
               {/* Stats */}
@@ -93,7 +102,7 @@ const AdminsPage = () => {
                 </div>
                 <div style={{ textAlign: 'center', padding: '0.5rem', background: '#d1fae5', borderRadius: '6px' }}>
                   <div style={{ fontSize: '1.1rem', fontWeight: '800', color: '#065f46' }}>{admin.stats.completed}</div>
-                  <div style={{ fontSize: '0.62rem', color: '#065f46', textTransform: 'uppercase' }}>Done</div>
+                  <div style={{ fontSize: '0.62rem', color: '#065f46', textTransform: 'uppercase' }}>Completed</div>
                 </div>
                 <div style={{ textAlign: 'center', padding: '0.5rem', background: '#fef9c3', borderRadius: '6px' }}>
                   <div style={{ fontSize: '1.1rem', fontWeight: '800', color: '#854d0e' }}>{admin.stats.pending}</div>
@@ -102,7 +111,7 @@ const AdminsPage = () => {
               </div>
 
               {/* Actions */}
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <div onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                 <button onClick={() => setSelectedAdmin(admin)}
                   style={{ flex: 1, minWidth: '110px', padding: '0.5rem', background: '#e8f0f9', border: 'none', borderRadius: '7px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '600', color: '#1e3a5f', fontFamily: 'inherit' }}>
                   🏫 Manage Schools
@@ -285,7 +294,8 @@ const ManageSchoolsModal = ({ admin, onClose, onUpdated }) => {
   const [allSchools, setAllSchools]           = useState([]);
   const [loading, setLoading]                 = useState(true);
   const [assigning, setAssigning]             = useState(false);
-  const [selectedSchool, setSelectedSchool]   = useState('');
+  const [selectedSchools, setSelectedSchools] = useState([]); // array of school _ids — supports assigning many at once
+  const [assignError, setAssignError]         = useState('');
 
   useEffect(() => { fetchData(); }, []);
 
@@ -302,22 +312,36 @@ const ManageSchoolsModal = ({ admin, onClose, onUpdated }) => {
     finally { setLoading(false); }
   };
 
+  const toggleSchoolSelection = (schoolId) => {
+    setSelectedSchools(prev => prev.includes(schoolId) ? prev.filter(id => id !== schoolId) : [...prev, schoolId]);
+  };
+
+  // Assigns every selected school by calling the existing single-school
+  // endpoint once per school (in parallel) — reuses its audit logging, status
+  // auto-advance, and notification side effects exactly as-is for each one,
+  // rather than duplicating that logic in a separate bulk endpoint.
   const handleAssign = async () => {
-    if (!selectedSchool) return;
+    if (selectedSchools.length === 0) return;
     setAssigning(true);
-    try {
-      await API.put(`/schools/${selectedSchool}/assign-admin`, { adminId: admin._id });
-      setSelectedSchool('');
-      await fetchData();
-      onUpdated();
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setAssigning(false);
+    setAssignError('');
+    const results = await Promise.allSettled(
+      selectedSchools.map(schoolId => API.put(`/schools/${schoolId}/assign-admin`, { adminId: admin._id }))
+    );
+    const failed = results
+      .map((r, i) => ({ r, school: allSchools.find(s => s._id === selectedSchools[i]) }))
+      .filter(({ r }) => r.status === 'rejected');
+    if (failed.length > 0) {
+      setAssignError(`Failed to assign ${failed.length} school${failed.length !== 1 ? 's' : ''}: ${failed.map(f => f.school?.schoolName || 'Unknown').join(', ')}`);
     }
+    setSelectedSchools([]);
+    await fetchData();
+    onUpdated();
+    setAssigning(false);
   };
 
   const unassignedSchools = allSchools.filter(s => !assignedSchools.find(a => a._id === s._id));
+  const allUnassignedSelected = unassignedSchools.length > 0 && unassignedSchools.every(s => selectedSchools.includes(s._id));
+  const toggleSelectAll = () => setSelectedSchools(allUnassignedSelected ? [] : unassignedSchools.map(s => s._id));
 
   return (
     <div style={overlay} onClick={onClose}>
@@ -336,24 +360,41 @@ const ManageSchoolsModal = ({ admin, onClose, onUpdated }) => {
           ) : (
             <>
               <div style={{ marginBottom: '1.5rem', padding: '1rem', background: '#f8fafc', borderRadius: '10px', border: '1px solid #f1f5f9' }}>
-                <label style={{ fontSize: '0.78rem', fontWeight: '700', color: '#374151', display: 'block', marginBottom: '0.5rem' }}>
-                  Assign a School to {admin.name}
-                </label>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <select value={selectedSchool} onChange={e => setSelectedSchool(e.target.value)}
-                    style={{ flex: 1, padding: '0.55rem 0.75rem', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '0.85rem', outline: 'none', fontFamily: 'inherit', background: '#fff' }}>
-                    <option value="">Select a school...</option>
-                    {unassignedSchools.map(s => (
-                      <option key={s._id} value={s._id}>{s.schoolName} ({s.currentStatus})</option>
-                    ))}
-                  </select>
-                  <button onClick={handleAssign} disabled={!selectedSchool || assigning}
-                    style={{ padding: '0.55rem 1.1rem', background: !selectedSchool ? '#94a3b8' : '#1e3a5f', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: '600', fontSize: '0.82rem', cursor: !selectedSchool ? 'not-allowed' : 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                    {assigning ? 'Assigning...' : '+ Assign'}
-                  </button>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <label style={{ fontSize: '0.78rem', fontWeight: '700', color: '#374151' }}>
+                    Assign Schools to {admin.name} {selectedSchools.length > 0 && `(${selectedSchools.length} selected)`}
+                  </label>
+                  {unassignedSchools.length > 0 && (
+                    <button type="button" onClick={toggleSelectAll}
+                      style={{ background: 'none', border: 'none', color: '#1e3a5f', fontWeight: '600', fontSize: '0.72rem', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>
+                      {allUnassignedSelected ? 'Clear all' : 'Select all'}
+                    </button>
+                  )}
                 </div>
-                {unassignedSchools.length === 0 && (
-                  <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.5rem' }}>All schools are already assigned to this admin.</div>
+
+                {unassignedSchools.length === 0 ? (
+                  <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>All schools are already assigned to this admin.</div>
+                ) : (
+                  <div style={{ maxHeight: '200px', overflowY: 'auto', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', marginBottom: '0.75rem' }}>
+                    {unassignedSchools.map(s => (
+                      <label key={s._id} htmlFor={`school-${s._id}`}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.55rem 0.75rem', borderBottom: '1px solid #f8fafc', cursor: 'pointer', fontSize: '0.82rem', color: '#374151' }}>
+                        <input id={`school-${s._id}`} type="checkbox" checked={selectedSchools.includes(s._id)} onChange={() => toggleSchoolSelection(s._id)} />
+                        <span style={{ flex: 1 }}>{s.schoolName}</span>
+                        <StatusBadge status={s.currentStatus} size="sm" />
+                      </label>
+                    ))}
+                  </div>
+                )}
+
+                <button onClick={handleAssign} disabled={selectedSchools.length === 0 || assigning}
+                  style={{ width: '100%', padding: '0.55rem 1.1rem', background: selectedSchools.length === 0 ? '#94a3b8' : '#1e3a5f', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: '600', fontSize: '0.82rem', cursor: selectedSchools.length === 0 ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
+                  {assigning ? 'Assigning...' : `+ Assign ${selectedSchools.length > 0 ? selectedSchools.length : ''} School${selectedSchools.length === 1 ? '' : 's'}`}
+                </button>
+                {assignError && (
+                  <div style={{ marginTop: '0.6rem', padding: '0.5rem 0.7rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', fontSize: '0.75rem', color: '#991b1b' }}>
+                    {assignError}
+                  </div>
                 )}
               </div>
 

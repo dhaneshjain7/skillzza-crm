@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../../components/layout/Layout';
 import StatusBadge, { ADMIN_LABELS } from '../../components/common/StatusBadge';
+import HealthBadge from '../../components/common/HealthBadge';
 import API from '../../api/axios';
 import AddSchoolModal from '../../components/school/AddSchoolModal';
 
@@ -15,6 +16,8 @@ const ACTIVITY_FIELDS = [
   { value: 'hackathonRegistered',   label: 'Hackathon Participated' },
   { value: 'poeSubmitted',          label: 'POE Recived' },
   { value: 'cpdTrainingDone',       label: 'CPD Training Done' },
+  { value: 'aiPlaygroundDone',      label: 'AI Playground' },
+  { value: 'skillsStudioDone',      label: 'Skills Studio' },
 ];
 
 const SchoolsPage = ({ role = 'superadmin' }) => {
@@ -32,6 +35,39 @@ const SchoolsPage = ({ role = 'superadmin' }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const limit = 10;
   const accent = role === 'superadmin' ? '#1e3a5f' : '#1a3a5c';
+
+  // Delete school — SuperAdmin only, two-step confirmation (see modal below):
+  // step 1 is a plain "are you sure", step 2 requires typing the school's exact
+  // name before the button enables, so a reflexive double-click can't trigger
+  // a destructive action by accident.
+  const [deleteTarget, setDeleteTarget] = useState(null); // the school object, or null when closed
+  const [deleteStep,   setDeleteStep]   = useState(1);
+  const [confirmText,  setConfirmText]  = useState('');
+  const [deleting,     setDeleting]     = useState(false);
+  const [deleteError,  setDeleteError]  = useState('');
+
+  const openDeleteModal = (school) => {
+    setDeleteTarget(school);
+    setDeleteStep(1);
+    setConfirmText('');
+    setDeleteError('');
+  };
+  const closeDeleteModal = () => { setDeleteTarget(null); setDeleteError(''); };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      await API.delete(`/schools/${deleteTarget._id}`);
+      setDeleteTarget(null);
+      fetchSchools();
+    } catch (err) {
+      setDeleteError(err.response?.data?.message || 'Failed to delete school. Please try again.');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   // AI natural-language query
   const [aiQueryIn, setAiQueryIn] = useState('');
@@ -226,7 +262,7 @@ const SchoolsPage = ({ role = 'superadmin' }) => {
             <table style={{ width:'100%', borderCollapse:'collapse' }}>
               <thead>
                 <tr style={{ background:'#f8fafc' }}>
-                  {['School','Contact','Location','Board','Assigned Admin','Status','Added',''].map(h => (
+                  {['School','Contact','Location','Board','Assigned Admin','Status','Health','Added',''].map(h => (
                     <th key={h} style={{ textAlign:'left', padding:'0.75rem 1rem', fontSize:'0.68rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em', borderBottom:'1px solid #f1f5f9', whiteSpace:'nowrap' }}>{h}</th>
                   ))}
                 </tr>
@@ -265,14 +301,24 @@ const SchoolsPage = ({ role = 'superadmin' }) => {
                       {school.assignedAdmin?.name || 'Unassigned'}
                     </td>
                     <td style={{ padding:'0.875rem 1rem' }}><StatusBadge status={school.currentStatus} size="sm" /></td>
+                    <td style={{ padding:'0.875rem 1rem' }}><HealthBadge health={school.healthScore} /></td>
                     <td style={{ padding:'0.875rem 1rem', fontSize:'0.75rem', color:'#94a3b8', whiteSpace:'nowrap' }}>
                       {new Date(school.createdAt).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}
                     </td>
                     <td style={{ padding:'0.875rem 1rem' }}>
-                      <button onClick={e => { e.stopPropagation(); navigate(`${basePath}/schools/${school._id}`); }}
-                        style={{ background:'#f1f5f9', border:'none', borderRadius:'6px', padding:'0.3rem 0.75rem', fontSize:'0.78rem', color: accent, fontWeight:'600', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>
-                        Open →
-                      </button>
+                      <div style={{ display:'flex', gap:'0.4rem' }}>
+                        <button onClick={e => { e.stopPropagation(); navigate(`${basePath}/schools/${school._id}`); }}
+                          style={{ background:'#f1f5f9', border:'none', borderRadius:'6px', padding:'0.3rem 0.75rem', fontSize:'0.78rem', color: accent, fontWeight:'600', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>
+                          Open →
+                        </button>
+                        {role === 'superadmin' && (
+                          <button onClick={e => { e.stopPropagation(); openDeleteModal(school); }}
+                            title="Delete school"
+                            style={{ background:'#fef2f2', border:'none', borderRadius:'6px', padding:'0.3rem 0.6rem', fontSize:'0.78rem', color:'#dc2626', fontWeight:'600', cursor:'pointer', fontFamily:'inherit' }}>
+                            🗑
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -311,6 +357,64 @@ const SchoolsPage = ({ role = 'superadmin' }) => {
           onClose={() => setShowAddModal(false)}
           onCreated={() => { setShowAddModal(false); fetchSchools(); }}
         />
+      )}
+
+      {/* Delete School Modal — two-step confirmation, SuperAdmin only */}
+      {deleteTarget && (
+        <div onClick={closeDeleteModal}
+          style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.55)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100, padding:'1rem' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background:'#fff', borderRadius:'14px', width:'100%', maxWidth:'440px', padding:'1.5rem', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
+
+            {deleteStep === 1 ? (
+              <>
+                <div style={{ fontSize:'2rem', marginBottom:'0.75rem' }}>⚠️</div>
+                <h3 style={{ margin:'0 0 0.5rem', fontSize:'1.05rem', fontWeight:'800', color:'#1e293b' }}>Delete "{deleteTarget.schoolName}"?</h3>
+                <p style={{ margin:'0 0 1.25rem', fontSize:'0.85rem', color:'#64748b', lineHeight:1.6 }}>
+                  This will hide the school from every list, report, and AI query, and deactivate its portal login so it can no longer sign in.
+                  This isn't easily reversible from the app — only your database administrator could restore it.
+                </p>
+                <div style={{ display:'flex', gap:'0.75rem', justifyContent:'flex-end' }}>
+                  <button onClick={closeDeleteModal}
+                    style={{ padding:'0.6rem 1.25rem', background:'#f1f5f9', border:'none', borderRadius:'8px', cursor:'pointer', fontFamily:'inherit', fontWeight:'600', color:'#475569', fontSize:'0.85rem' }}>
+                    Cancel
+                  </button>
+                  <button onClick={() => setDeleteStep(2)}
+                    style={{ padding:'0.6rem 1.25rem', background:'#dc2626', color:'#fff', border:'none', borderRadius:'8px', cursor:'pointer', fontFamily:'inherit', fontWeight:'700', fontSize:'0.85rem' }}>
+                    Continue
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize:'2rem', marginBottom:'0.75rem' }}>🗑️</div>
+                <h3 style={{ margin:'0 0 0.5rem', fontSize:'1.05rem', fontWeight:'800', color:'#1e293b' }}>Confirm permanent removal</h3>
+                <p style={{ margin:'0 0 0.75rem', fontSize:'0.85rem', color:'#64748b', lineHeight:1.6 }}>
+                  Type <strong style={{ color:'#1e293b' }}>{deleteTarget.schoolName}</strong> below to confirm.
+                </p>
+                <input type="text" value={confirmText} onChange={e => setConfirmText(e.target.value)}
+                  placeholder={deleteTarget.schoolName} autoFocus
+                  style={{ width:'100%', boxSizing:'border-box', padding:'0.6rem 0.875rem', border:'1.5px solid #e2e8f0', borderRadius:'8px', fontSize:'0.875rem', outline:'none', fontFamily:'inherit', marginBottom:'0.75rem' }} />
+                {deleteError && (
+                  <div style={{ marginBottom:'0.75rem', padding:'0.6rem 0.75rem', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'8px', fontSize:'0.8rem', color:'#991b1b' }}>
+                    {deleteError}
+                  </div>
+                )}
+                <div style={{ display:'flex', gap:'0.75rem', justifyContent:'flex-end' }}>
+                  <button onClick={() => setDeleteStep(1)} disabled={deleting}
+                    style={{ padding:'0.6rem 1.25rem', background:'#f1f5f9', border:'none', borderRadius:'8px', cursor: deleting ? 'default' : 'pointer', fontFamily:'inherit', fontWeight:'600', color:'#475569', fontSize:'0.85rem' }}>
+                    Back
+                  </button>
+                  <button onClick={handleConfirmDelete}
+                    disabled={deleting || confirmText.trim() !== deleteTarget.schoolName}
+                    style={{ padding:'0.6rem 1.25rem', background: (deleting || confirmText.trim() !== deleteTarget.schoolName) ? '#fca5a5' : '#dc2626', color:'#fff', border:'none', borderRadius:'8px', cursor: (deleting || confirmText.trim() !== deleteTarget.schoolName) ? 'not-allowed' : 'pointer', fontFamily:'inherit', fontWeight:'700', fontSize:'0.85rem' }}>
+                    {deleting ? 'Deleting...' : 'Delete Permanently'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
     </Layout>
   );

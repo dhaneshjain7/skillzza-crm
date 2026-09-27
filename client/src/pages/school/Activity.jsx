@@ -9,11 +9,13 @@ const ACTIVITY_FIELDS = [
   { name: 'teachersDataReceived', label: 'Teachers Data Received' },
   { name: 'hackathonRegistered',  label: 'Hackathon Participated' },
   { name: 'poeSubmitted',         label: 'POE Recived' },
+  { name: 'aiPlaygroundDone',     label: 'AI Playground' },
+  { name: 'skillsStudioDone',     label: 'Skills Studio' },
 ];
 
 const QUARTERS = ['q1', 'q2', 'q3', 'q4'];
 const QUARTER_LABELS = { q1: 'Q1', q2: 'Q2', q3: 'Q3', q4: 'Q4' };
-const MONTHS = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+const MONTHS = ['apr','may','jun','jul','aug','sep','oct','nov','dec','jan','feb','mar']; // fiscal year order (Apr-Mar)
 const MONTH_LABELS = { jan:'Jan',feb:'Feb',mar:'Mar',apr:'Apr',may:'May',jun:'Jun',jul:'Jul',aug:'Aug',sep:'Sep',oct:'Oct',nov:'Nov',dec:'Dec' };
 
 const YesNoBadge = ({ value }) => {
@@ -91,8 +93,13 @@ const SchoolActivity = () => {
                       <th colSpan={4} style={th}>Quaterly Activity (MAU)</th>
                       <th colSpan={12} style={th}>Monthly Activity (DCAIS)</th>
                       <th rowSpan={2} style={th}>Annual Hackathon Participated</th>
+                      <th rowSpan={2} style={th}>AI Playground</th>
+                      <th rowSpan={2} style={th}>Skills Studio</th>
+                      <th rowSpan={2} style={th}>Adobe ID Created</th>
+                      <th rowSpan={2} style={th}>Adobe ID Activated</th>
                       <th rowSpan={2} style={th}>Certificate Received</th>
                       <th rowSpan={2} style={th}>Certificate Link</th>
+                      <th rowSpan={2} style={th}>Remarks</th>
                     </tr>
                     <tr>
                       {QUARTERS.map(q => <th key={q} style={thSub}>{QUARTER_LABELS[q]}</th>)}
@@ -109,12 +116,17 @@ const SchoolActivity = () => {
                         {QUARTERS.map(q => <td key={q} style={{ ...td, textAlign:'center' }}><Check on={!!s.mauQuarterly?.[q]} /></td>)}
                         {MONTHS.map(m => <td key={m} style={{ ...td, textAlign:'center' }}><Check on={!!s.dcaisMonthly?.[m]} /></td>)}
                         <td style={{ ...td, textAlign:'center' }}><Check on={!!s.hackathonParticipated} /></td>
+                        <td style={{ ...td, textAlign:'center' }}><Check on={!!s.aiPlaygroundParticipated} /></td>
+                        <td style={{ ...td, textAlign:'center' }}><Check on={!!s.skillsStudioParticipated} /></td>
+                        <td style={{ ...td, textAlign:'center' }}><Check on={!!s.adobeIdCreated} /></td>
+                        <td style={{ ...td, textAlign:'center' }}><Check on={!!s.adobeIdActivated} /></td>
                         <td style={{ ...td, textAlign:'center' }}><Check on={!!s.certificateReceived} /></td>
                         <td style={td}>
                           {s.certificateLink
                             ? <a href={s.certificateLink} target="_blank" rel="noreferrer" style={{ color:'#1e5f4e', fontWeight:'600' }}>View</a>
                             : '—'}
                         </td>
+                        <td style={td}>{s.remarks || '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -139,6 +151,7 @@ const SchoolActivity = () => {
                       <th colSpan={12} style={th}>Monthly Activity (DCAIS)</th>
                       <th rowSpan={2} style={th}>Certificate Received</th>
                       <th rowSpan={2} style={th}>Certificate Link</th>
+                      <th rowSpan={2} style={th}>Remarks</th>
                     </tr>
                     <tr>
                       {QUARTERS.map(q => <th key={q} style={thSub}>{QUARTER_LABELS[q]}</th>)}
@@ -158,6 +171,7 @@ const SchoolActivity = () => {
                             ? <a href={t.certificateLink} target="_blank" rel="noreferrer" style={{ color:'#1e5f4e', fontWeight:'600' }}>View</a>
                             : '—'}
                         </td>
+                        <td style={td}>{t.remarks || '—'}</td>
                       </tr>
                     ))}
                   </tbody>

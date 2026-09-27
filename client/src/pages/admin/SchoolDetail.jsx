@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import Layout from '../../components/layout/Layout';
 import StatusBadge from '../../components/common/StatusBadge';
+import HealthBadge from '../../components/common/HealthBadge';
 import API from '../../api/axios';
 import { exportPDF, exportExcel, exportWord, exportCSV } from '../../utils/exportReport';
 import { downloadStudentsActivityTemplate, downloadTeachersActivityTemplate } from '../../utils/downloadFile';
@@ -29,11 +30,13 @@ const ACTIVITY_FIELDS = [
   { name: 'hackathonRegistered',  label: 'Hackathon Participated' },
   { name: 'poeSubmitted',         label: 'POE Recived' },
   { name: 'cpdTrainingDone',      label: 'CPD Training Done' },
+  { name: 'aiPlaygroundDone',     label: 'AI Playground' },
+  { name: 'skillsStudioDone',     label: 'Skills Studio' },
 ];
 
 const QUARTERS = ['q1', 'q2', 'q3', 'q4'];
 const QUARTER_LABELS = { q1: 'Q1', q2: 'Q2', q3: 'Q3', q4: 'Q4' };
-const MONTHS = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+const MONTHS = ['apr','may','jun','jul','aug','sep','oct','nov','dec','jan','feb','mar']; // fiscal year order (Apr-Mar)
 const MONTH_LABELS = { jan:'Jan',feb:'Feb',mar:'Mar',apr:'Apr',may:'May',jun:'Jun',jul:'Jul',aug:'Aug',sep:'Sep',oct:'Oct',nov:'Nov',dec:'Dec' };
 
 const EXPORT_FORMATS = [
@@ -50,6 +53,7 @@ const blankTeacher = () => ({
   dcaisMonthly: { jan:false,feb:false,mar:false,apr:false,may:false,jun:false,jul:false,aug:false,sep:false,oct:false,nov:false,dec:false },
   certificateReceived: false,
   certificateLink: '',
+  remarks: '',
 });
 
 const blankStudent = () => ({
@@ -60,8 +64,13 @@ const blankStudent = () => ({
   mauQuarterly: { q1: false, q2: false, q3: false, q4: false },
   dcaisMonthly: { jan:false,feb:false,mar:false,apr:false,may:false,jun:false,jul:false,aug:false,sep:false,oct:false,nov:false,dec:false },
   hackathonParticipated: false,
+  aiPlaygroundParticipated: false,
+  skillsStudioParticipated: false,
+  adobeIdCreated: false,
+  adobeIdActivated: false,
   certificateReceived: false,
   certificateLink: '',
+  remarks: '',
 });
 
 const SchoolDetail = () => {
@@ -223,6 +232,9 @@ const SchoolDetail = () => {
     setForm({
       schoolName:         s.schoolName         || '',
       udiseCode:          s.udiseCode          || '',
+      spoc:               s.spoc               || '',
+      spocPhone:          s.spocPhone          || '',
+      spocEmail:          s.spocEmail          || '',
       email:              s.email              || '',
       phone:              s.phone              || '',
       altPhone:           s.altPhone           || '',
@@ -255,6 +267,8 @@ const SchoolDetail = () => {
       hackathonRegistered:  s.hackathonRegistered  || 'No',
       poeSubmitted:         s.poeSubmitted         || 'No',
       cpdTrainingDone:      s.cpdTrainingDone      || 'No',
+      aiPlaygroundDone:     s.aiPlaygroundDone     || 'No',
+      skillsStudioDone:     s.skillsStudioDone     || 'No',
     });
   };
 
@@ -267,6 +281,7 @@ const SchoolDetail = () => {
       dcaisMonthly: { ...blankTeacher().dcaisMonthly, ...t.dcaisMonthly },
       certificateReceived: !!t.certificateReceived,
       certificateLink: t.certificateLink || '',
+      remarks: t.remarks || '',
     })));
   };
 
@@ -298,8 +313,13 @@ const SchoolDetail = () => {
       mauQuarterly: { ...blankStudent().mauQuarterly, ...t.mauQuarterly },
       dcaisMonthly: { ...blankStudent().dcaisMonthly, ...t.dcaisMonthly },
       hackathonParticipated: !!t.hackathonParticipated,
+      aiPlaygroundParticipated: !!t.aiPlaygroundParticipated,
+      skillsStudioParticipated: !!t.skillsStudioParticipated,
+      adobeIdCreated: !!t.adobeIdCreated,
+      adobeIdActivated: !!t.adobeIdActivated,
       certificateReceived: !!t.certificateReceived,
       certificateLink: t.certificateLink || '',
+      remarks: t.remarks || '',
     })));
   };
 
@@ -327,21 +347,56 @@ const SchoolDetail = () => {
   };
 
   // ── Save profile ──────────────────────────────────────────────────────────
+  // Mirrors the required-fields + format rules the server enforces (see
+  // schoolController.updateSchool) so the user gets an immediate, specific
+  // error instead of waiting on a round-trip — the server still re-checks
+  // everything, this is just for a fast, friendly first pass.
+  const validateProfileForm = () => {
+    const missing = [];
+    if (!form.schoolName?.trim())       missing.push('School Name');
+    if (!form.udiseCode?.trim())        missing.push('UDISE Code');
+    if (!form.spoc?.trim())             missing.push('School SPOC');
+    if (!form.spocPhone?.trim())        missing.push('SPOC Phone');
+    if (!form.spocEmail?.trim())        missing.push('SPOC Email');
+    if (!form.email?.trim())            missing.push('Email');
+    if (!form.phone?.trim())            missing.push('Phone');
+    if (!form['address.city']?.trim())  missing.push('City');
+    if (!form['address.state']?.trim()) missing.push('State');
+    if (!form.board?.trim())            missing.push('Board');
+    if (!form.schoolType?.trim())       missing.push('School Type');
+    if (form.studentCount === '' || form.studentCount == null) missing.push('Student Count');
+    if (form.staffCount === '' || form.staffCount == null)     missing.push('Staff Count');
+    if (missing.length) return `${missing.join(', ')} ${missing.length > 1 ? 'are' : 'is'} required.`;
+
+    if (!/^\d{11}$/.test(form.udiseCode.trim()))  return 'UDISE Code must be exactly 11 digits.';
+    if (!/^\d{10}$/.test(form.phone.trim()))      return 'Phone must be exactly 10 digits.';
+    if (!/^\d{10}$/.test(form.spocPhone.trim()))  return 'SPOC Phone must be exactly 10 digits.';
+    return null;
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
+    const validationError = validateProfileForm();
+    if (validationError) {
+      showMsg('❌ ' + validationError);
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
         schoolName:         form.schoolName,
         udiseCode:          form.udiseCode,
+        spoc:               form.spoc,
+        spocPhone:          form.spocPhone,
+        spocEmail:          form.spocEmail,
         email:              form.email,
         phone:              form.phone,
         altPhone:           form.altPhone,
         website:            form.website,
         board:              form.board,
         schoolType:         form.schoolType,
-        studentCount:       form.studentCount    ? Number(form.studentCount)    : undefined,
-        staffCount:         form.staffCount      ? Number(form.staffCount)      : undefined,
+        studentCount:       form.studentCount !== '' ? Number(form.studentCount) : undefined,
+        staffCount:         form.staffCount   !== '' ? Number(form.staffCount)   : undefined,
         address: {
           street:   form['address.street'],
           city:     form['address.city'],
@@ -438,6 +493,7 @@ const SchoolDetail = () => {
     MONTHS.forEach(m => { row[`DCAIS ${MONTH_LABELS[m]}`] = t.dcaisMonthly[m] ? 'Yes' : 'No'; });
     row['Certificate Received'] = t.certificateReceived ? 'Yes' : 'No';
     row['Certificate Link'] = t.certificateLink || '—';
+    row['Remarks'] = t.remarks || '—';
     return row;
   });
 
@@ -501,8 +557,13 @@ const SchoolDetail = () => {
     QUARTERS.forEach(q => { row[`MAU ${QUARTER_LABELS[q]}`] = t.mauQuarterly[q] ? 'Yes' : 'No'; });
     MONTHS.forEach(m => { row[`DCAIS ${MONTH_LABELS[m]}`] = t.dcaisMonthly[m] ? 'Yes' : 'No'; });
     row['Annual Hackathon Participated'] = t.hackathonParticipated ? 'Yes' : 'No';
+    row['AI Playground'] = t.aiPlaygroundParticipated ? 'Yes' : 'No';
+    row['Skills Studio'] = t.skillsStudioParticipated ? 'Yes' : 'No';
+    row['Adobe ID Created'] = t.adobeIdCreated ? 'Yes' : 'No';
+    row['Adobe ID Activated'] = t.adobeIdActivated ? 'Yes' : 'No';
     row['Certificate Received'] = t.certificateReceived ? 'Yes' : 'No';
     row['Certificate Link'] = t.certificateLink || '—';
+    row['Remarks'] = t.remarks || '—';
     return row;
   });
 
@@ -613,6 +674,11 @@ const SchoolDetail = () => {
       {/* ── TAB: Overview ── */}
       {tab === 'overview' && (
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1.25rem' }}>
+          {school.healthScore && (
+            <div style={{ ...card, gridColumn:'1 / -1' }}>
+              <HealthScoreCard health={school.healthScore} />
+            </div>
+          )}
           <InfoCard title="Basic Details" items={[
             { label:'School Name',      value: school.schoolName },
             { label:'UDISE Code',       value: school.udiseCode || 'Not provided' },
@@ -625,8 +691,11 @@ const SchoolDetail = () => {
             { label:'CPD Training Level', value: school.cpdTrainingLevel || 'Not set' },
           ]} />
           <InfoCard title="Contact Details" items={[
-            { label:'Email',     value: school.email },
-            { label:'Phone',     value: school.phone },
+            { label:'School SPOC', value: school.spoc || 'Not provided' },
+            { label:'SPOC Phone',  value: school.spocPhone || 'Not provided' },
+            { label:'SPOC Email',  value: school.spocEmail || 'Not provided' },
+            { label:'School Email', value: school.email },
+            { label:'School Phone', value: school.phone },
             { label:'Alt Phone', value: school.altPhone || '—' },
             { label:'Street',    value: school.address?.street || '—' },
             { label:'City',      value: school.address?.city || '—' },
@@ -778,16 +847,16 @@ const SchoolDetail = () => {
           <h3 style={{ margin:'0 0 1.25rem', fontSize:'1rem', fontWeight:'700', color:'#1e293b' }}>✏️ Edit School Profile</h3>
           <form onSubmit={handleSave}>
             <Section title="Basic Details">
-              <Row><Field label="School Name *"        name="schoolName"         value={form.schoolName}         onChange={handleChange} required /><Field label="UDISE Code *" name="udiseCode" value={form.udiseCode} onChange={handleChange} required placeholder="11-digit UDISE code" /></Row>
-              <Row><Field label="Email *"              name="email"              value={form.email}              onChange={handleChange} required type="email" /><Field label="Phone *" name="phone" value={form.phone} onChange={handleChange} required /></Row>
-              <Row><Field label="UDISE Code *"         name="udiseCode"          value={form.udiseCode}          onChange={handleChange} required placeholder="11-digit UDISE code" /><Field label="Alt Phone" name="altPhone" value={form.altPhone} onChange={handleChange} /></Row>
-              <Row><Field label="Website"              name="website"            value={form.website}            onChange={handleChange} /><div /></Row>
+              <Row><Field label="School Name *"        name="schoolName"         value={form.schoolName}         onChange={handleChange} required /><Field label="UDISE Code *" name="udiseCode" value={form.udiseCode} onChange={handleChange} required maxLength={11} pattern="\d{11}" title="Must be exactly 11 digits" placeholder="11-digit UDISE code" /></Row>
+              <Row><Field label="School SPOC *"        name="spoc"               value={form.spoc}               onChange={handleChange} required /><Field label="SPOC Phone *" name="spocPhone" value={form.spocPhone} onChange={handleChange} required maxLength={10} pattern="\d{10}" title="Must be exactly 10 digits" placeholder="10-digit phone number" /></Row>
+              <Row><Field label="SPOC Email *"         name="spocEmail"          value={form.spocEmail}          onChange={handleChange} required type="email" /><div /></Row>
+              <Row><Field label="School Email *"       name="email"              value={form.email}              onChange={handleChange} required type="email" /><Field label="School Phone *" name="phone" value={form.phone} onChange={handleChange} required maxLength={10} pattern="\d{10}" title="Must be exactly 10 digits" placeholder="10-digit phone number" /></Row>
+              <Row><Field label="Alt Phone"            name="altPhone"           value={form.altPhone}           onChange={handleChange} /><Field label="Website" name="website" value={form.website} onChange={handleChange} /></Row>
               <Row>
-                <SelectField label="Board" name="board" value={form.board} onChange={handleChange} options={['CBSE','ICSE','IB','State Board','Other']} />
-                <SelectField label="School Type" name="schoolType" value={form.schoolType} onChange={handleChange} options={['Primary','Secondary','Higher Secondary','College','Other']} />
+                <SelectField label="Board *" name="board" value={form.board} onChange={handleChange} required options={['CBSE','ICSE','IB','State Board','Other']} />
+                <SelectField label="School Type *" name="schoolType" value={form.schoolType} onChange={handleChange} required options={['Primary','Secondary','Higher Secondary','College','Other']} />
               </Row>
-              <Row><Field label="Student Count (6-12)" name="studentCount" value={form.studentCount} onChange={handleChange} type="number" /><Field label="Staff Count (6-12)" name="staffCount" value={form.staffCount} onChange={handleChange} type="number" /></Row>
-              <Row><Field label="Staff Count (6-12)" name="staffCount" value={form.staffCount} onChange={handleChange} type="number" /><div /></Row>
+              <Row><Field label="Student Count (6-12) *" name="studentCount" value={form.studentCount} onChange={handleChange} type="number" required min="0" /><Field label="Staff Count (6-12) *" name="staffCount" value={form.staffCount} onChange={handleChange} type="number" required min="0" /></Row>
             </Section>
             <Section title="Address">
               <Field label="Street Address" name="address.street" value={form['address.street']} onChange={handleChange} fullWidth />
@@ -821,33 +890,19 @@ const SchoolDetail = () => {
         <div style={card}>
           <h3 style={{ margin:'0 0 1.25rem', fontSize:'1rem', fontWeight:'700', color:'#1e293b' }}>📌 Activity</h3>
           <form onSubmit={handleActivitySave}>
-            <Row>
-              {ACTIVITY_FIELDS.slice(0, 2).map(f => (
-                <SelectField key={f.name} label={f.label} name={f.name} value={activityForm[f.name]}
-                  onChange={e => setActivityForm(a => ({ ...a, [f.name]: e.target.value }))}
-                  options={['Yes', 'No']} />
-              ))}
-            </Row>
-            <Row>
-              {ACTIVITY_FIELDS.slice(2, 4).map(f => (
-                <SelectField key={f.name} label={f.label} name={f.name} value={activityForm[f.name]}
-                  onChange={e => setActivityForm(a => ({ ...a, [f.name]: e.target.value }))}
-                  options={['Yes', 'No']} />
-              ))}
-            </Row>
-            <Row>
-              {ACTIVITY_FIELDS.slice(4, 6).map(f => (
-                <SelectField key={f.name} label={f.label} name={f.name} value={activityForm[f.name]}
-                  onChange={e => setActivityForm(a => ({ ...a, [f.name]: e.target.value }))}
-                  options={['Yes', 'No']} />
-              ))}
-            </Row>
-            <Row>
-              <SelectField label={ACTIVITY_FIELDS[6].label} name={ACTIVITY_FIELDS[6].name} value={activityForm[ACTIVITY_FIELDS[6].name]}
-                onChange={e => setActivityForm(a => ({ ...a, [ACTIVITY_FIELDS[6].name]: e.target.value }))}
-                options={['Yes', 'No']} />
-              <div />
-            </Row>
+            {ACTIVITY_FIELDS.reduce((rows, f, i) => {
+              if (i % 2 === 0) rows.push([f]); else rows[rows.length - 1].push(f);
+              return rows;
+            }, []).map((pair, i) => (
+              <Row key={i}>
+                {pair.map(f => (
+                  <SelectField key={f.name} label={f.label} name={f.name} value={activityForm[f.name]}
+                    onChange={e => setActivityForm(a => ({ ...a, [f.name]: e.target.value }))}
+                    options={['Yes', 'No']} />
+                ))}
+                {pair.length < 2 && <div />}
+              </Row>
+            ))}
             <div style={{ display:'flex', gap:'0.75rem', justifyContent:'flex-end', paddingTop:'1rem', borderTop:'1px solid #f1f5f9' }}>
               <button type="submit" disabled={savingActivity} style={{ ...saveBtn, opacity: savingActivity ? 0.7 : 1 }}>
                 {savingActivity ? 'Saving...' : '✓ Save Activity'}
@@ -872,6 +927,7 @@ const SchoolDetail = () => {
                     <th colSpan={12} style={th}>Monthly Activity (DCAIS)</th>
                     <th rowSpan={2} style={th}>Certificate Received</th>
                     <th rowSpan={2} style={th}>Certificate Link</th>
+                    <th rowSpan={2} style={th}>Remarks</th>
                     <th rowSpan={2} style={{ ...th, width:'40px' }}></th>
                   </tr>
                   <tr>
@@ -881,7 +937,7 @@ const SchoolDetail = () => {
                 </thead>
                 <tbody>
                   {teachers.length === 0 ? (
-                    <tr><td colSpan={21} style={{ ...td, textAlign:'center', color:'#94a3b8', padding:'1.5rem' }}>No teachers added yet</td></tr>
+                    <tr><td colSpan={22} style={{ ...td, textAlign:'center', color:'#94a3b8', padding:'1.5rem' }}>No teachers added yet</td></tr>
                   ) : teachers.map((t, i) => (
                     <tr key={t._id || i}>
                       <td style={td}>
@@ -913,6 +969,11 @@ const SchoolDetail = () => {
                       <td style={td}>
                         <input type="text" value={t.certificateLink} placeholder="https://..."
                           onChange={e => updateTeacherField(i, 'certificateLink', e.target.value)}
+                          style={{ ...inputStyle, width:'160px', boxSizing:'border-box' }} />
+                      </td>
+                      <td style={td}>
+                        <input type="text" value={t.remarks} placeholder="Remarks"
+                          onChange={e => updateTeacherField(i, 'remarks', e.target.value)}
                           style={{ ...inputStyle, width:'160px', boxSizing:'border-box' }} />
                       </td>
                       <td style={{ ...td, textAlign:'center' }}>
@@ -982,8 +1043,13 @@ const SchoolDetail = () => {
                     <th colSpan={4} style={th}>Quaterly Activity (MAU)</th>
                     <th colSpan={12} style={th}>Monthly Activity (DCAIS)</th>
                     <th rowSpan={2} style={th}>Annual Hackathon Participated</th>
+                    <th rowSpan={2} style={th}>AI Playground</th>
+                    <th rowSpan={2} style={th}>Skills Studio</th>
+                    <th rowSpan={2} style={th}>Adobe ID Created</th>
+                    <th rowSpan={2} style={th}>Adobe ID Activated</th>
                     <th rowSpan={2} style={th}>Certificate Received</th>
                     <th rowSpan={2} style={th}>Certificate Link</th>
+                    <th rowSpan={2} style={th}>Remarks</th>
                     <th rowSpan={2} style={{ ...th, width:'40px' }}></th>
                   </tr>
                   <tr>
@@ -993,7 +1059,7 @@ const SchoolDetail = () => {
                 </thead>
                 <tbody>
                   {students.length === 0 ? (
-                    <tr><td colSpan={24} style={{ ...td, textAlign:'center', color:'#94a3b8', padding:'1.5rem' }}>No students added yet</td></tr>
+                    <tr><td colSpan={29} style={{ ...td, textAlign:'center', color:'#94a3b8', padding:'1.5rem' }}>No students added yet</td></tr>
                   ) : students.map((t, i) => (
                     <tr key={t._id || i}>
                       <td style={td}>
@@ -1033,12 +1099,33 @@ const SchoolDetail = () => {
                           onChange={e => updateStudentField(i, 'hackathonParticipated', e.target.checked)} />
                       </td>
                       <td style={{ ...td, textAlign:'center' }}>
+                        <input type="checkbox" checked={!!t.aiPlaygroundParticipated}
+                          onChange={e => updateStudentField(i, 'aiPlaygroundParticipated', e.target.checked)} />
+                      </td>
+                      <td style={{ ...td, textAlign:'center' }}>
+                        <input type="checkbox" checked={!!t.skillsStudioParticipated}
+                          onChange={e => updateStudentField(i, 'skillsStudioParticipated', e.target.checked)} />
+                      </td>
+                      <td style={{ ...td, textAlign:'center' }}>
+                        <input type="checkbox" checked={!!t.adobeIdCreated}
+                          onChange={e => updateStudentField(i, 'adobeIdCreated', e.target.checked)} />
+                      </td>
+                      <td style={{ ...td, textAlign:'center' }}>
+                        <input type="checkbox" checked={!!t.adobeIdActivated}
+                          onChange={e => updateStudentField(i, 'adobeIdActivated', e.target.checked)} />
+                      </td>
+                      <td style={{ ...td, textAlign:'center' }}>
                         <input type="checkbox" checked={!!t.certificateReceived}
                           onChange={e => updateStudentField(i, 'certificateReceived', e.target.checked)} />
                       </td>
                       <td style={td}>
                         <input type="text" value={t.certificateLink} placeholder="https://..."
                           onChange={e => updateStudentField(i, 'certificateLink', e.target.value)}
+                          style={{ ...inputStyle, width:'160px', boxSizing:'border-box' }} />
+                      </td>
+                      <td style={td}>
+                        <input type="text" value={t.remarks} placeholder="Remarks"
+                          onChange={e => updateStudentField(i, 'remarks', e.target.value)}
                           style={{ ...inputStyle, width:'160px', boxSizing:'border-box' }} />
                       </td>
                       <td style={{ ...td, textAlign:'center' }}>
@@ -1117,12 +1204,6 @@ const SchoolDetail = () => {
               <input type="text" value={statusForm.remarks} onChange={e => setStatusForm(f => ({ ...f, remarks: e.target.value }))}
                 placeholder="Reason for status change..."
                 style={{ ...inputStyle, width:'100%', boxSizing:'border-box', marginTop:'0.375rem' }} />
-            </div>
-            <div style={{ marginBottom:'1.25rem' }}>
-              <label style={labelStyle}>Additional Notes</label>
-              <textarea value={statusForm.reason} onChange={e => setStatusForm(f => ({ ...f, reason: e.target.value }))}
-                placeholder="Additional details (optional)..."
-                rows={3} style={{ ...inputStyle, width:'100%', boxSizing:'border-box', resize:'vertical', marginTop:'0.375rem' }} />
             </div>
             <div style={{ display:'flex', gap:'0.75rem', justifyContent:'flex-end' }}>
               <button type="button" onClick={() => setStatusForm({ newStatus:'', remarks:'', reason:'' })} style={cancelBtn}>Clear</button>
@@ -1235,6 +1316,43 @@ const SchoolDetail = () => {
 };
 
 // ── Shared Components ─────────────────────────────────────────────────────────
+const HealthScoreCard = ({ health }) => (
+  <div>
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'1rem', flexWrap:'wrap', gap:'0.75rem' }}>
+      <h3 style={{ margin:0, fontSize:'0.9rem', fontWeight:'700', color:'#1e293b' }}>🩺 DCAIS Health Score</h3>
+      <HealthBadge health={health} size="lg" />
+    </div>
+    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:'0.6rem' }}>
+      {Object.values(health.components).map(c => (
+        <div key={c.label} style={{ padding:'0.6rem 0.75rem', background: c.applicable ? '#f8fafc' : '#f8fafc', borderRadius:'8px', border:'1px solid #f1f5f9', opacity: c.applicable ? 1 : 0.55 }}>
+          <div style={{ fontSize:'0.72rem', fontWeight:'600', color:'#475569', marginBottom:'0.3rem' }}>{c.label} <span style={{ color:'#94a3b8' }}>({c.weight}pt)</span></div>
+          {c.applicable ? (
+            <>
+              <div style={{ height:'6px', background:'#e2e8f0', borderRadius:'3px', overflow:'hidden', marginBottom:'0.3rem' }}>
+                <div style={{ height:'100%', width:`${c.percent}%`, background: c.percent >= 80 ? '#16a34a' : c.percent >= 60 ? '#ca8a04' : '#dc2626', borderRadius:'3px' }} />
+              </div>
+              <div style={{ fontSize:'0.72rem', color:'#1e293b', fontWeight:'700' }}>{c.percent}%</div>
+            </>
+          ) : (
+            <>
+              <div style={{ height:'6px', background:'#e2e8f0', borderRadius:'3px', overflow:'hidden', marginBottom:'0.3rem' }}>
+                <div style={{ height:'100%', width:'0%', background:'#dc2626', borderRadius:'3px' }} />
+              </div>
+              <div style={{ fontSize:'0.72rem', color:'#1e293b', fontWeight:'700' }}>0%</div>
+              <div style={{ fontSize:'0.65rem', color:'#94a3b8', fontStyle:'italic', marginTop:'2px' }}>Not applicable — no records to score</div>
+            </>
+          )}
+        </div>
+      ))}
+    </div>
+    {health.daysSinceLastActivity != null && (
+      <div style={{ marginTop:'0.75rem', fontSize:'0.7rem', color:'#94a3b8' }}>
+        Last recorded activity: {health.daysSinceLastActivity === 0 ? 'today' : `${health.daysSinceLastActivity} day${health.daysSinceLastActivity !== 1 ? 's' : ''} ago`}
+      </div>
+    )}
+  </div>
+);
+
 const InfoCard = ({ title, items }) => (
   <div style={card}>
     <h3 style={{ margin:'0 0 1rem', fontSize:'0.9rem', fontWeight:'700', color:'#1e293b' }}>{title}</h3>
@@ -1260,18 +1378,18 @@ const Row = ({ children }) => (
   <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.75rem', marginBottom:'0.75rem' }}>{children}</div>
 );
 
-const Field = ({ label, name, value, onChange, required, type='text', fullWidth, placeholder }) => (
+const Field = ({ label, name, value, onChange, required, type='text', fullWidth, placeholder, ...rest }) => (
   <div style={{ display:'flex', flexDirection:'column', gap:'0.3rem', marginBottom: fullWidth ? '0.75rem' : 0 }}>
     <label style={labelStyle}>{label}</label>
-    <input type={type} name={name} value={value} onChange={onChange} required={required} placeholder={placeholder}
+    <input type={type} name={name} value={value} onChange={onChange} required={required} placeholder={placeholder} {...rest}
       style={{ ...inputStyle, width:'100%', boxSizing:'border-box' }} />
   </div>
 );
 
-const SelectField = ({ label, name, value, onChange, options }) => (
+const SelectField = ({ label, name, value, onChange, options, required }) => (
   <div style={{ display:'flex', flexDirection:'column', gap:'0.3rem' }}>
     <label style={labelStyle}>{label}</label>
-    <select name={name} value={value} onChange={onChange} style={{ ...inputStyle, background:'#fff' }}>
+    <select name={name} value={value} onChange={onChange} required={required} style={{ ...inputStyle, background:'#fff' }}>
       <option value="">Select...</option>
       {options.map(o => <option key={o} value={o}>{o}</option>)}
     </select>

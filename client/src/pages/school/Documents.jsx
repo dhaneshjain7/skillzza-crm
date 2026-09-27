@@ -5,8 +5,8 @@ import API from '../../api/axios';
 
 const DOC_TYPES = [
   { key: 'school_approval',        label: 'LOI',                     icon: '🏫', desc: 'Please refer to the attached LOI template, which should be printed on the school letterhead. Please fill it out, sign and stamp it, and upload a copy.' },
-  { key: 'student_data',           label: 'Student Data',            icon: '🎓', desc: 'First Name, Last Name, Grade, Section, School Name, City/State, UDISE Code' },
-  { key: 'teacher_data',           label: 'Teacher Data',            icon: '👩‍🏫', desc: 'First Name, Last Name, Email ID, School Name, School City, UDISE Code' },
+  { key: 'student_data',           label: 'Student Data',            icon: '🎓', desc: 'First Name, Last Name, Grade, Section, School Name, School City, UDISE Code, Year, District, State, E-mail ID (optional)' },
+  { key: 'teacher_data',           label: 'Teacher Data',            icon: '👩‍🏫', desc: 'First Name, Last Name, School Name, School City, UDISE Code, E-mail ID (optional)' },
   { key: 'adobe_student_accounts', label: 'Adobe Student IDs',       icon: '💻', desc: 'Name, ID, PW, School Name, Class Section, UDISE Code, City, State' },
   { key: 'adobe_teacher_accounts', label: 'Adobe Teacher IDs',       icon: '💻', desc: 'Name, ID, PW, School Name, UDISE Code, City, State' },
 ];

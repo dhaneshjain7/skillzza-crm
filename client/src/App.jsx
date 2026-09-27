@@ -16,6 +16,7 @@ import { SuperAdminSchools } from './pages/superadmin/Schools';
 import SuperAdminReports     from './pages/superadmin/Reports';
 import AuditTrail            from './pages/superadmin/AuditTrail';
 import AdminsManagement      from './pages/superadmin/Admins';
+import AdminActivity         from './pages/superadmin/AdminActivity';
 
 import AdminDashboard        from './pages/admin/Dashboard';
 import { AdminSchools }      from './pages/superadmin/Schools';
@@ -23,6 +24,7 @@ import AdminDocuments        from './pages/admin/Documents';
 import AdminMessages         from './pages/admin/Messages';
 import AdminReports          from './pages/admin/Reports';
 import AdminSchoolDetail      from './pages/admin/SchoolDetail';
+import AdminActivityPage     from './pages/admin/Activity';
 
 import SchoolDashboard       from './pages/school/Dashboard';
 import SchoolDocuments       from './pages/school/Documents';
@@ -56,6 +58,7 @@ const AppRoutes = () => (
       <Route path="/superadmin/schools/:schoolId"           element={<AdminSchoolDetail />} />
       <Route path="/superadmin/reports"                     element={<SuperAdminReports />} />
       <Route path="/superadmin/admins"                      element={<AdminsManagement />} />
+      <Route path="/superadmin/admins/:adminId/activity"    element={<AdminActivity />} />
       <Route path="/superadmin/logs"                        element={<AuditTrail />} />
     </Route>
 
@@ -66,6 +69,7 @@ const AppRoutes = () => (
       <Route path="/admin/schools/:schoolId/documents"      element={<AdminDocuments />} />
       <Route path="/admin/schools/:schoolId"                element={<AdminSchoolDetail />} />
       <Route path="/admin/messages"                         element={<AdminMessages />} />
+      <Route path="/admin/activity"                         element={<AdminActivityPage />} />
       <Route path="/admin/reports"                          element={<AdminReports />} />
       <Route path="/admin/logs"                             element={<AuditTrail />} />
     </Route>

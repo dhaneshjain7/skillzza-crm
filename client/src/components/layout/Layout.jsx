@@ -15,6 +15,7 @@ const TITLES = {
   '/admin/dashboard':      'Dashboard',
   '/admin/schools':        'My Schools',
   '/admin/messages':       'Messages',
+  '/admin/activity':       'Activity',
   '/admin/reports':        'Reports',
   '/admin/logs':           'Activity Logs',
   '/school/dashboard':     'My Dashboard',

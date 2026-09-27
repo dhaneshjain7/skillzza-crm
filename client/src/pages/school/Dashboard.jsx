@@ -102,8 +102,40 @@ const SchoolDashboard = () => {
     }
   };
 
+  // Mirrors the required-fields + format rules the server enforces (see
+  // schoolController.updateSchool) so the user gets an immediate, specific
+  // error instead of waiting on a round-trip — the server still re-checks
+  // everything, this is just for a fast, friendly first pass.
+  const validateForm = () => {
+    const missing = [];
+    if (!form.schoolName?.trim())       missing.push('School Name');
+    if (!form.udiseCode?.trim())        missing.push('UDISE Code');
+    if (!form.email?.trim())            missing.push('School Email');
+    if (!form.phone?.trim())            missing.push('School Phone');
+    if (!form.spoc?.trim())             missing.push('School SPOC');
+    if (!form.spocPhone?.trim())        missing.push('SPOC Phone');
+    if (!form.spocEmail?.trim())        missing.push('SPOC Email');
+    if (!form['address.city']?.trim())  missing.push('City');
+    if (!form['address.state']?.trim()) missing.push('State');
+    if (!form.board?.trim())            missing.push('Board');
+    if (!form.schoolType?.trim())       missing.push('School Type');
+    if (form.studentCount === '' || form.studentCount == null) missing.push('Student Count');
+    if (form.staffCount === '' || form.staffCount == null)     missing.push('Staff Count');
+    if (missing.length) return `${missing.join(', ')} ${missing.length > 1 ? 'are' : 'is'} required.`;
+
+    if (!/^\d{11}$/.test(form.udiseCode.trim())) return 'UDISE Code must be exactly 11 digits.';
+    if (!/^\d{10}$/.test(form.phone.trim()))     return 'School Phone must be exactly 10 digits.';
+    if (!/^\d{10}$/.test(form.spocPhone.trim())) return 'SPOC Phone must be exactly 10 digits.';
+    return null;
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
+    const validationError = validateForm();
+    if (validationError) {
+      setSaveMsg('❌ ' + validationError);
+      return;
+    }
     setSaving(true);
     setSaveMsg('');
     try {
@@ -119,8 +151,8 @@ const SchoolDashboard = () => {
         spocEmail:          form.spocEmail,
         board:              form.board,
         schoolType:         form.schoolType,
-        studentCount:       form.studentCount    ? Number(form.studentCount)    : undefined,
-        staffCount:         form.staffCount      ? Number(form.staffCount)      : undefined,
+        studentCount:       form.studentCount !== '' ? Number(form.studentCount) : undefined,
+        staffCount:         form.staffCount   !== '' ? Number(form.staffCount)   : undefined,
         address: {
           street:   form['address.street'],
           city:     form['address.city'],
@@ -277,33 +309,33 @@ const SchoolDashboard = () => {
                 <Section title="Basic Details">
                   <Row>
                     <Field label="School Name *"         name="schoolName"         value={form.schoolName}         onChange={handleChange} required />
-                    <Field label="UDISE Code *"          name="udiseCode"          value={form.udiseCode}          onChange={handleChange} required />
+                    <Field label="UDISE Code *"          name="udiseCode"          value={form.udiseCode}          onChange={handleChange} required maxLength={11} pattern="\d{11}" title="Must be exactly 11 digits" placeholder="11-digit UDISE code" />
                   </Row>
                   <Row>
-                    <Field label="School SPOC"           name="spoc"               value={form.spoc}               onChange={handleChange} />
-                    <Field label="SPOC Phone"            name="spocPhone"          value={form.spocPhone}          onChange={handleChange} />
+                    <Field label="School SPOC *"         name="spoc"               value={form.spoc}               onChange={handleChange} required />
+                    <Field label="SPOC Phone *"          name="spocPhone"          value={form.spocPhone}          onChange={handleChange} required maxLength={10} pattern="\d{10}" title="Must be exactly 10 digits" placeholder="10-digit phone number" />
                   </Row>
                   <Row>
-                    <Field label="SPOC Email"            name="spocEmail"          value={form.spocEmail}          onChange={handleChange} type="email" />
+                    <Field label="SPOC Email *"          name="spocEmail"          value={form.spocEmail}          onChange={handleChange} required type="email" />
                     <div /> {/* empty cell */}
                   </Row>
                   <Row>
                     <Field label="School Email *"        name="email"              value={form.email}              onChange={handleChange} required type="email" />
-                    <Field label="School Phone *"        name="phone"              value={form.phone}              onChange={handleChange} required />
+                    <Field label="School Phone *"        name="phone"              value={form.phone}              onChange={handleChange} required maxLength={10} pattern="\d{10}" title="Must be exactly 10 digits" placeholder="10-digit phone number" />
                   </Row>
                   <Row>
                     <Field label="Alt Phone"             name="altPhone"           value={form.altPhone}           onChange={handleChange} />
                     <Field label="Website"               name="website"            value={form.website}            onChange={handleChange} />
                   </Row>
                   <Row>
-                    <SelectField label="Board"           name="board"              value={form.board}              onChange={handleChange}
+                    <SelectField label="Board *"         name="board"              value={form.board}              onChange={handleChange} required
                       options={['CBSE','ICSE','IB','State Board','Other']} />
-                    <SelectField label="School Type"     name="schoolType"         value={form.schoolType}         onChange={handleChange}
+                    <SelectField label="School Type *"   name="schoolType"         value={form.schoolType}         onChange={handleChange} required
                       options={['Primary','Secondary','Higher Secondary','College','Other']} />
                   </Row>
                   <Row>
-                    <Field label="Student Count (6-12)"  name="studentCount"       value={form.studentCount}       onChange={handleChange} type="number" />
-                    <Field label="Staff Count (6-12)"    name="staffCount"         value={form.staffCount}         onChange={handleChange} type="number" />
+                    <Field label="Student Count (6-12) *" name="studentCount"      value={form.studentCount}       onChange={handleChange} type="number" required min="0" />
+                    <Field label="Staff Count (6-12) *"   name="staffCount"        value={form.staffCount}         onChange={handleChange} type="number" required min="0" />
                   </Row>
                 </Section>
 
@@ -483,18 +515,18 @@ const Row = ({ children }) => (
   </div>
 );
 
-const Field = ({ label, name, value, onChange, required, type = 'text', fullWidth }) => (
+const Field = ({ label, name, value, onChange, required, type = 'text', fullWidth, ...rest }) => (
   <div style={{ display:'flex', flexDirection:'column', gap:'0.3rem', marginBottom: fullWidth ? '0.75rem' : 0 }}>
     <label style={{ fontSize:'0.75rem', fontWeight:'600', color:'#374151' }}>{label}</label>
-    <input type={type} name={name} value={value} onChange={onChange} required={required}
+    <input type={type} name={name} value={value} onChange={onChange} required={required} {...rest}
       style={{ padding:'0.55rem 0.75rem', border:'1.5px solid #e2e8f0', borderRadius:'8px', fontSize:'0.875rem', outline:'none', fontFamily:'inherit', color:'#1e293b', width:'100%', boxSizing:'border-box' }} />
   </div>
 );
 
-const SelectField = ({ label, name, value, onChange, options }) => (
+const SelectField = ({ label, name, value, onChange, options, required }) => (
   <div style={{ display:'flex', flexDirection:'column', gap:'0.3rem' }}>
     <label style={{ fontSize:'0.75rem', fontWeight:'600', color:'#374151' }}>{label}</label>
-    <select name={name} value={value} onChange={onChange}
+    <select name={name} value={value} onChange={onChange} required={required}
       style={{ padding:'0.55rem 0.75rem', border:'1.5px solid #e2e8f0', borderRadius:'8px', fontSize:'0.875rem', outline:'none', fontFamily:'inherit', color:'#1e293b', background:'#fff' }}>
       <option value="">Select...</option>
       {options.map(o => <option key={o} value={o}>{o}</option>)}

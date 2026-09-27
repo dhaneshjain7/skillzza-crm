@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import API from '../../api/axios';
 import { downloadSchoolsBulkTemplate } from '../../utils/downloadFile';
+import { exportCSV } from '../../utils/exportReport';
 
 const AddSchoolModal = ({ onClose, onCreated }) => {
   const [mode, setMode] = useState('single'); // 'single' | 'bulk'
@@ -170,9 +171,26 @@ const AddSchoolModal = ({ onClose, onCreated }) => {
 
             {bulkResult.created.length > 0 && (
               <>
-                <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: '0 0 0.5rem' }}>
-                  ⚠️ These passwords won't be shown again — copy them now, or reset from each school's detail page later.
-                </p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                  <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: 0 }}>
+                    ⚠️ These passwords won't be shown again — download them now, or reset from each school's detail page later.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => exportCSV(
+                      bulkResult.created.map(c => ({
+                        School: c.schoolName,
+                        'Login Email': c.loginEmail || 'No login (no email given)',
+                        Password: c.password || '—',
+                      })),
+                      'Bulk Import — Login Credentials',
+                      'bulk_import_credentials'
+                    )}
+                    style={{ display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0, padding: '0.4rem 0.8rem', background: '#1e3a5f', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.75rem', fontWeight: '700', whiteSpace: 'nowrap' }}
+                  >
+                    ⬇ Download CSV
+                  </button>
+                </div>
                 <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px', marginBottom: '1.25rem' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
                     <thead>
@@ -186,8 +204,8 @@ const AddSchoolModal = ({ onClose, onCreated }) => {
                       {bulkResult.created.map(c => (
                         <tr key={c.schoolId} style={{ borderBottom: '1px solid #f1f5f9' }}>
                           <td style={{ padding: '0.5rem 0.75rem', color: '#1e293b', fontWeight: '600' }}>{c.schoolName}</td>
-                          <td style={{ padding: '0.5rem 0.75rem', color: '#374151' }}>{c.loginEmail}</td>
-                          <td style={{ padding: '0.5rem 0.75rem', color: '#374151', fontFamily: 'monospace' }}>{c.password}</td>
+                          <td style={{ padding: '0.5rem 0.75rem', color: c.loginEmail ? '#374151' : '#94a3b8', fontStyle: c.loginEmail ? 'normal' : 'italic' }}>{c.loginEmail || 'No login (no email given)'}</td>
+                          <td style={{ padding: '0.5rem 0.75rem', color: '#374151', fontFamily: 'monospace' }}>{c.password || '—'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -252,8 +270,9 @@ const AddSchoolModal = ({ onClose, onCreated }) => {
         {mode === 'bulk' ? (
           <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1 }}>
             <p style={{ fontSize: '0.82rem', color: '#64748b', marginTop: 0 }}>
-              Download the template, fill in one row per school, then upload it here. Each school gets a portal login
-              where the <strong>login email is the school's own email</strong> and a <strong>random password</strong> is generated automatically.
+              Download the template, fill in one row per school, then upload it here. Email and Phone are optional —
+              a school with an email gets a portal login automatically (<strong>login email = the school's email</strong>,
+              a <strong>random password</strong> is generated); one without an email can have a login added later.
             </p>
 
             <button type="button" onClick={() => downloadSchoolsBulkTemplate()}
