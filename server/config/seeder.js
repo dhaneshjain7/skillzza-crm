@@ -138,6 +138,7 @@ async function seed() {
   if (!school) {
     school = await School.create({
       schoolName:    'Delhi Public School',
+      udiseCode:     '10123456789', // placeholder — udiseCode is required at the schema level; real schools get a real 11-digit code on creation/import
       email:         'dps@skillzza.com',
       phone:         '0112345678',
       schoolType:    'Secondary',
