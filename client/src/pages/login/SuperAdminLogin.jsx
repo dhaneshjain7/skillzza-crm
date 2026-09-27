@@ -7,7 +7,6 @@ const config = {
   accent: '#1e3a5f',
   pageBg: 'linear-gradient(135deg, #0f2240 0%, #1e3a5f 100%)',
   badgeBg: '#e8f0f9',
-  hint: 'superadmin@skillzza.com / Admin@1234',
 };
 const SuperAdminLogin = () => <LoginPage roleConfig={config} />;
 export default SuperAdminLogin;

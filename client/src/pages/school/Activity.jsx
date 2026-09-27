@@ -149,6 +149,8 @@ const SchoolActivity = () => {
                       <th rowSpan={2} style={th}>Fiscal Year</th>
                       <th colSpan={4} style={th}>CPD Training Quarterly</th>
                       <th colSpan={12} style={th}>Monthly Activity (DCAIS)</th>
+                      <th rowSpan={2} style={th}>Adobe ID Created</th>
+                      <th rowSpan={2} style={th}>Adobe ID Activated</th>
                       <th rowSpan={2} style={th}>Certificate Received</th>
                       <th rowSpan={2} style={th}>Certificate Link</th>
                       <th rowSpan={2} style={th}>Remarks</th>
@@ -165,6 +167,8 @@ const SchoolActivity = () => {
                         <td style={td}>{t.fiscalYear || '—'}</td>
                         {QUARTERS.map(q => <td key={q} style={{ ...td, textAlign:'center' }}><Check on={!!t.cpdQuarterly?.[q]} /></td>)}
                         {MONTHS.map(m => <td key={m} style={{ ...td, textAlign:'center' }}><Check on={!!t.dcaisMonthly?.[m]} /></td>)}
+                        <td style={{ ...td, textAlign:'center' }}><Check on={!!t.adobeIdCreated} /></td>
+                        <td style={{ ...td, textAlign:'center' }}><Check on={!!t.adobeIdActivated} /></td>
                         <td style={{ ...td, textAlign:'center' }}><Check on={!!t.certificateReceived} /></td>
                         <td style={td}>
                           {t.certificateLink

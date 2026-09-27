@@ -413,7 +413,7 @@ const TEACHERS_ACTIVITY_SCHEMA = {
     // Fiscal year order (Apr-Mar), matching CPD quarters and the rest of the app.
     'DCAIS Apr', 'DCAIS May', 'DCAIS Jun', 'DCAIS Jul', 'DCAIS Aug', 'DCAIS Sep',
     'DCAIS Oct', 'DCAIS Nov', 'DCAIS Dec', 'DCAIS Jan', 'DCAIS Feb', 'DCAIS Mar',
-    'Certificate Received', 'Certificate Link', 'Remarks',
+    'Adobe ID Created', 'Adobe ID Activated', 'Certificate Received', 'Certificate Link', 'Remarks',
   ],
   aliases: {
     'teacher name': 'Teacher Name',
@@ -427,6 +427,8 @@ const TEACHERS_ACTIVITY_SCHEMA = {
     'jan': 'DCAIS Jan', 'feb': 'DCAIS Feb', 'mar': 'DCAIS Mar', 'apr': 'DCAIS Apr',
     'may': 'DCAIS May', 'jun': 'DCAIS Jun', 'jul': 'DCAIS Jul', 'aug': 'DCAIS Aug',
     'sep': 'DCAIS Sep', 'oct': 'DCAIS Oct', 'nov': 'DCAIS Nov', 'dec': 'DCAIS Dec',
+    'adobe id created':   'Adobe ID Created',
+    'adobe id activated': 'Adobe ID Activated',
     'certificate received': 'Certificate Received',
     'certificate link':     'Certificate Link',
     'remarks':              'Remarks',

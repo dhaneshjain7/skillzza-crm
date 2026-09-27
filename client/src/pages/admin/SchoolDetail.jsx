@@ -51,6 +51,8 @@ const blankTeacher = () => ({
   fiscalYear: '',
   cpdQuarterly: { q1: false, q2: false, q3: false, q4: false },
   dcaisMonthly: { jan:false,feb:false,mar:false,apr:false,may:false,jun:false,jul:false,aug:false,sep:false,oct:false,nov:false,dec:false },
+  adobeIdCreated: false,
+  adobeIdActivated: false,
   certificateReceived: false,
   certificateLink: '',
   remarks: '',
@@ -279,6 +281,8 @@ const SchoolDetail = () => {
       fiscalYear: t.fiscalYear || '',
       cpdQuarterly: { ...blankTeacher().cpdQuarterly, ...t.cpdQuarterly },
       dcaisMonthly: { ...blankTeacher().dcaisMonthly, ...t.dcaisMonthly },
+      adobeIdCreated: !!t.adobeIdCreated,
+      adobeIdActivated: !!t.adobeIdActivated,
       certificateReceived: !!t.certificateReceived,
       certificateLink: t.certificateLink || '',
       remarks: t.remarks || '',
@@ -491,6 +495,8 @@ const SchoolDetail = () => {
     const row = { 'Teacher Name': t.name || '—', 'Fiscal Year': t.fiscalYear || '—' };
     QUARTERS.forEach(q => { row[`CPD ${QUARTER_LABELS[q]}`] = t.cpdQuarterly[q] ? 'Yes' : 'No'; });
     MONTHS.forEach(m => { row[`DCAIS ${MONTH_LABELS[m]}`] = t.dcaisMonthly[m] ? 'Yes' : 'No'; });
+    row['Adobe ID Created'] = t.adobeIdCreated ? 'Yes' : 'No';
+    row['Adobe ID Activated'] = t.adobeIdActivated ? 'Yes' : 'No';
     row['Certificate Received'] = t.certificateReceived ? 'Yes' : 'No';
     row['Certificate Link'] = t.certificateLink || '—';
     row['Remarks'] = t.remarks || '—';
@@ -925,6 +931,8 @@ const SchoolDetail = () => {
                     <th rowSpan={2} style={th}>Fiscal Year</th>
                     <th colSpan={4} style={th}>CPD Training Quarterly</th>
                     <th colSpan={12} style={th}>Monthly Activity (DCAIS)</th>
+                    <th rowSpan={2} style={th}>Adobe ID Created</th>
+                    <th rowSpan={2} style={th}>Adobe ID Activated</th>
                     <th rowSpan={2} style={th}>Certificate Received</th>
                     <th rowSpan={2} style={th}>Certificate Link</th>
                     <th rowSpan={2} style={th}>Remarks</th>
@@ -937,7 +945,7 @@ const SchoolDetail = () => {
                 </thead>
                 <tbody>
                   {teachers.length === 0 ? (
-                    <tr><td colSpan={22} style={{ ...td, textAlign:'center', color:'#94a3b8', padding:'1.5rem' }}>No teachers added yet</td></tr>
+                    <tr><td colSpan={24} style={{ ...td, textAlign:'center', color:'#94a3b8', padding:'1.5rem' }}>No teachers added yet</td></tr>
                   ) : teachers.map((t, i) => (
                     <tr key={t._id || i}>
                       <td style={td}>
@@ -962,6 +970,14 @@ const SchoolDetail = () => {
                             onChange={e => updateTeacherField(i, `dcaisMonthly.${m}`, e.target.checked)} />
                         </td>
                       ))}
+                      <td style={{ ...td, textAlign:'center' }}>
+                        <input type="checkbox" checked={!!t.adobeIdCreated}
+                          onChange={e => updateTeacherField(i, 'adobeIdCreated', e.target.checked)} />
+                      </td>
+                      <td style={{ ...td, textAlign:'center' }}>
+                        <input type="checkbox" checked={!!t.adobeIdActivated}
+                          onChange={e => updateTeacherField(i, 'adobeIdActivated', e.target.checked)} />
+                      </td>
                       <td style={{ ...td, textAlign:'center' }}>
                         <input type="checkbox" checked={!!t.certificateReceived}
                           onChange={e => updateTeacherField(i, 'certificateReceived', e.target.checked)} />

@@ -1,6 +1,6 @@
 const fs = require('fs');
 const { School, SchoolStatusHistory, AuditLog, ActivityLog, User } = require('../models');
-const { notifyStatusUpdate, notifyAdminAssigned, notifyPasswordChanged } = require('../utils/notificationService');
+const { notifyStatusUpdate, notifyAdminAssigned, notifyPasswordChanged, notifySchoolCreated } = require('../utils/notificationService');
 const { parseFile, validateAgainstSchema, STUDENTS_ACTIVITY_SCHEMA, TEACHERS_ACTIVITY_SCHEMA, SCHOOLS_BULK_SCHEMA } = require('../utils/fileParser');
 const { buildSchoolFilter } = require('../utils/schoolFilter');
 const { attachHealthScores } = require('../utils/healthScore');
@@ -55,14 +55,19 @@ const createSchool = async (req, res) => {
       board, website,
       udiseCode, studentCount,
       staffCount, tags, assignedAdmin,
+      spoc, spocPhone, spocEmail,
       loginEmail, loginPassword,
     } = req.body;
 
-    if (!schoolName || !email || !phone || !udiseCode) {
+    if (!schoolName || !email || !phone || !udiseCode || !spoc || !spocPhone || !spocEmail) {
       return res.status(400).json({
         success: false,
-        message: 'School name, email, phone and UDISE code are required.',
+        message: 'School name, email, phone, UDISE code, SPOC name, SPOC phone and SPOC email are required.',
       });
+    }
+
+    if (!/^\d{10}$/.test(String(spocPhone).trim())) {
+      return res.status(400).json({ success: false, message: 'SPOC Phone must be exactly 10 digits.' });
     }
 
     // Check duplicate email
@@ -107,6 +112,9 @@ const createSchool = async (req, res) => {
       staffCount,
       tags,
       assignedAdmin: assignedAdmin || null,
+      spoc:      spoc.trim(),
+      spocPhone: String(spocPhone).trim(),
+      spocEmail: spocEmail.trim().toLowerCase(),
       currentStatus: 'New',
     });
 
@@ -163,6 +171,8 @@ const createSchool = async (req, res) => {
       relatedSchool: school._id,
       req,
     });
+
+    await notifySchoolCreated({ school, createdByLabel: `added by ${req.user.name}`, io: req.app.get('io') });
 
     res.status(201).json({ success: true, school, loginCreated: createdLoginInfo });
   } catch (err) {
@@ -316,6 +326,8 @@ const importSchoolsBulk = async (req, res) => {
           description: `School "${schoolName}" created via bulk import`,
           req,
         });
+
+        await notifySchoolCreated({ school, createdByLabel: `bulk-imported by ${req.user.name}`, io: req.app.get('io') });
 
         created.push({ row: rowNum, schoolName, schoolId: school._id, loginEmail: email || null, password });
       } catch (rowErr) {
@@ -1341,6 +1353,8 @@ const importTeachersActivity = async (req, res) => {
         may: toBool(r['DCAIS May']), jun: toBool(r['DCAIS Jun']), jul: toBool(r['DCAIS Jul']), aug: toBool(r['DCAIS Aug']),
         sep: toBool(r['DCAIS Sep']), oct: toBool(r['DCAIS Oct']), nov: toBool(r['DCAIS Nov']), dec: toBool(r['DCAIS Dec']),
       },
+      adobeIdCreated:      toBool(r['Adobe ID Created']),
+      adobeIdActivated:    toBool(r['Adobe ID Activated']),
       certificateReceived: toBool(r['Certificate Received']),
       certificateLink:     r['Certificate Link'] || '',
       remarks:             r['Remarks'] || '',

@@ -55,6 +55,7 @@ const BI_DASHBOARDS = [
 
 const AnalyticsQueryPanel = ({ exampleQuestions = DEFAULT_EXAMPLE_QUESTIONS, showBiDashboards = true }) => {
   const [analyticsQuery,   setAnalyticsQuery]   = useState('');
+  const [askedQuestion,    setAskedQuestion]    = useState(''); // snapshot of the question actually submitted — shown above its answer, independent of whatever's typed in the box afterward
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsAnswer,  setAnalyticsAnswer]  = useState('');
   const [analyticsViz,     setAnalyticsViz]     = useState(null);
@@ -64,7 +65,8 @@ const AnalyticsQueryPanel = ({ exampleQuestions = DEFAULT_EXAMPLE_QUESTIONS, sho
   const askAnalytics = async (q) => {
     const question = (q ?? analyticsQuery).trim();
     if (!question) return;
-    setAnalyticsQuery(question);
+    setAnalyticsQuery(''); // clear the box right away — the question is echoed above its answer instead
+    setAskedQuestion(question);
     setAnalyticsLoading(true);
     setAnalyticsError('');
     setAnalyticsAnswer('');
@@ -125,6 +127,12 @@ const AnalyticsQueryPanel = ({ exampleQuestions = DEFAULT_EXAMPLE_QUESTIONS, sho
         ))}
       </div>
 
+      {askedQuestion && (analyticsLoading || analyticsAnswer || analyticsError) && (
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.4rem', marginBottom: '0.5rem', fontSize: '0.82rem', color: '#475569' }}>
+          <span style={{ flexShrink: 0 }}>🗨️</span>
+          <span style={{ fontWeight: '600' }}>{askedQuestion}</span>
+        </div>
+      )}
       {analyticsLoading && (
         <div style={{ padding: '0.9rem', color: '#94a3b8', fontSize: '0.85rem' }}>Analyzing the data...</div>
       )}

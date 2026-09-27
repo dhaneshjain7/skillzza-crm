@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
 import PrivateRoute  from './routes/PrivateRoute';
 import RoleRoute     from './routes/RoleRoute';
+import IdleLogout    from './components/auth/IdleLogout';
 
 import RoleSelect      from './pages/RoleSelect';
 import SuperAdminLogin from './pages/login/SuperAdminLogin';
@@ -96,6 +97,7 @@ const App = () => (
   <BrowserRouter>
     <AuthProvider>
       <SocketProvider>
+        <IdleLogout />
         <AppRoutes />
       </SocketProvider>
     </AuthProvider>

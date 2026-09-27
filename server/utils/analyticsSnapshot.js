@@ -133,16 +133,26 @@ const buildAnalyticsSnapshot = async ({ adminId } = {}) => {
     const studentsActivity = s.studentsActivity || [];
     const teachersActivity = s.teachersActivity || [];
 
+    // "Registered" means Adobe ID Created = Yes — a student/teacher can't
+    // actually perform any tracked activity (MAU, CPD, DCAIS, Hackathon, etc.)
+    // without an Adobe ID, so every percentage/count below is scoped to this
+    // subset rather than the raw tracked-row count. studentsActivity/
+    // teachersActivity (every row, regardless of Adobe ID) are kept around only
+    // for the features that are name lists rather than population percentages
+    // (repeat-participant detection, engagement recency, dropped-QoQ, etc.).
+    const registeredStudents = studentsActivity.filter(st => st.adobeIdCreated);
+    const registeredTeachers = teachersActivity.filter(t => t.adobeIdCreated);
+
     // Only quarters that have actually started this fiscal year — a future
     // quarter showing "0%" reads as "behind", when really it just hasn't
     // begun yet, so it's left out entirely rather than reported misleadingly.
     const mauQuarterlyPct = {};
     elapsedQuarterKeys().forEach(q => {
-      mauQuarterlyPct[q] = pct(studentsActivity.filter(st => st.mauQuarterly?.[q]).length, studentsActivity.length);
+      mauQuarterlyPct[q] = pct(registeredStudents.filter(st => st.mauQuarterly?.[q]).length, registeredStudents.length);
     });
     const cpdQuarterlyPct = {};
     elapsedQuarterKeys().forEach(q => {
-      cpdQuarterlyPct[q] = pct(teachersActivity.filter(t => t.cpdQuarterly?.[q]).length, teachersActivity.length);
+      cpdQuarterlyPct[q] = pct(registeredTeachers.filter(t => t.cpdQuarterly?.[q]).length, registeredTeachers.length);
     });
 
     // Which Monthly DCAIS Curriculum months this school is BEHIND on — a month
@@ -156,11 +166,11 @@ const buildAnalyticsSnapshot = async ({ adminId } = {}) => {
     // WHY a school is behind, not just that it is. "nextDcaisMonthDue" is the
     // oldest (most overdue) month — what "currently due" means in practice, the
     // thing to chase first, not the current calendar month itself.
-    const dcaisTrackingStarted = studentsActivity.length + teachersActivity.length > 0;
+    const dcaisTrackingStarted = registeredStudents.length + registeredTeachers.length > 0;
     const dcaisMonthsDue = elapsedMonthKeysFY()
       .filter(m => !dcaisTrackingStarted
-        || studentsActivity.some(st => !st.dcaisMonthly?.[m])
-        || teachersActivity.some(t => !t.dcaisMonthly?.[m]))
+        || registeredStudents.some(st => !st.dcaisMonthly?.[m])
+        || registeredTeachers.some(t => !t.dcaisMonthly?.[m]))
       .map(m => MONTH_LABELS[m]);
 
     // Month-by-month DCAIS completion %, keyed by full month name (April, May, …)
@@ -170,8 +180,8 @@ const buildAnalyticsSnapshot = async ({ adminId } = {}) => {
     // into one pool per month, matching how the Health Score itself scores DCAIS.
     const dcaisPctByMonth = {};
     elapsedMonthKeysFY().forEach(m => {
-      const done = studentsActivity.filter(st => st.dcaisMonthly?.[m]).length + teachersActivity.filter(t => t.dcaisMonthly?.[m]).length;
-      dcaisPctByMonth[MONTH_LABELS[m]] = pct(done, studentsActivity.length + teachersActivity.length);
+      const done = registeredStudents.filter(st => st.dcaisMonthly?.[m]).length + registeredTeachers.filter(t => t.dcaisMonthly?.[m]).length;
+      dcaisPctByMonth[MONTH_LABELS[m]] = pct(done, registeredStudents.length + registeredTeachers.length);
     });
     const nextDcaisMonthDue = dcaisMonthsDue.length > 0 ? dcaisMonthsDue[0] : null;
 
@@ -201,13 +211,13 @@ const buildAnalyticsSnapshot = async ({ adminId } = {}) => {
     const mauParticipationOfEnrolledPct = {};
     elapsedQuarterKeys().forEach(q => {
       mauParticipationOfEnrolledPct[q] = enrolledStudentCount > 0
-        ? pct(studentsActivity.filter(st => st.mauQuarterly?.[q]).length, enrolledStudentCount)
+        ? pct(registeredStudents.filter(st => st.mauQuarterly?.[q]).length, enrolledStudentCount)
         : null;
     });
     const cpdParticipationOfEnrolledPct = {};
     elapsedQuarterKeys().forEach(q => {
       cpdParticipationOfEnrolledPct[q] = enrolledTeacherCount > 0
-        ? pct(teachersActivity.filter(t => t.cpdQuarterly?.[q]).length, enrolledTeacherCount)
+        ? pct(registeredTeachers.filter(t => t.cpdQuarterly?.[q]).length, enrolledTeacherCount)
         : null;
     });
 
@@ -217,17 +227,25 @@ const buildAnalyticsSnapshot = async ({ adminId } = {}) => {
 
     // "Registered vs participated" for the one-time individual activities (Annual
     // Hackathon, AI Playground, Skills Studio, Adobe ID Created/Activated,
-    // Certificate Received) — same tracked-count denominator as mauQuarterlyPct/
-    // cpdQuarterlyPct, just not split by quarter since these aren't quarterly.
+    // Certificate Received) — "registered" here means Adobe ID Created = Yes,
+    // same population as mauQuarterlyPct/cpdQuarterlyPct, just not split by
+    // quarter since these aren't quarterly. EXCEPTION: "adobeIdCreated" itself is
+    // measured against EVERY tracked student, not the registered subset — it IS
+    // the definition of "registered", so measuring it against itself would be
+    // circular (always 100%) and would make "who still needs an Adobe ID"
+    // unanswerable. Its "registered" field means total TRACKED students instead;
+    // every other row's "registered" field means Adobe-ID-registered as usual.
     const studentActivityParticipation = {};
     STUDENT_FLAT_ACTIVITIES.forEach(a => {
-      const count = studentsActivity.filter(st => st[a.key]).length;
-      studentActivityParticipation[a.key] = { label: a.label, registered: studentsActivity.length, participated: count, pct: pct(count, studentsActivity.length) };
+      const pool = a.key === 'adobeIdCreated' ? studentsActivity : registeredStudents;
+      const count = pool.filter(st => st[a.key]).length;
+      studentActivityParticipation[a.key] = { label: a.label, registered: pool.length, participated: count, pct: pct(count, pool.length) };
     });
     const teacherActivityParticipation = {};
     TEACHER_FLAT_ACTIVITIES.forEach(a => {
-      const count = teachersActivity.filter(t => t[a.key]).length;
-      teacherActivityParticipation[a.key] = { label: a.label, registered: teachersActivity.length, participated: count, pct: pct(count, teachersActivity.length) };
+      const pool = a.key === 'adobeIdCreated' ? teachersActivity : registeredTeachers;
+      const count = pool.filter(t => t[a.key]).length;
+      teacherActivityParticipation[a.key] = { label: a.label, registered: pool.length, participated: count, pct: pct(count, pool.length) };
     });
 
     return {
@@ -246,12 +264,14 @@ const buildAnalyticsSnapshot = async ({ adminId } = {}) => {
       dcaisPctByMonth,    // month-by-month DCAIS completion %, keyed by full month name — for "show monthly Jan-Dec %" / chart-by-month questions
       dcaisStoppedAfterMonth, // last month with ANY DCAIS activity, if the school has since gone silent — null if never started, or still currently active
       dcaisStoppedAfterFiscalMonthNumber, // same, as fiscal-year month number (Apr=1 … Mar=12) — matches how "Month 3/6/9/12" in a question is meant
-      studentCount:   studentsActivity.length,
-      teacherCount:   teachersActivity.length,
+      studentCount:   registeredStudents.length, // REGISTERED students (Adobe ID Created = Yes) — the population every % below is based on
+      teacherCount:   registeredTeachers.length, // same, for teachers
+      totalTrackedStudents: studentsActivity.length, // every student entered in Students Activity, regardless of Adobe ID — for "how many students are entered/tracked" questions, not "registered"
+      totalTrackedTeachers: teachersActivity.length,
       enrolledStudentCount,  // school's self-reported TOTAL enrollment — null if not recorded on the school's profile
       enrolledTeacherCount,  // school's self-reported TOTAL staff count — null if not recorded
-      mauQuarterlyPct,       // % of this school's TRACKED students marked done, per quarter (null = no students on record)
-      cpdQuarterlyPct,       // % of this school's TRACKED teachers marked done, per quarter (null = no teachers on record)
+      mauQuarterlyPct,       // % of this school's REGISTERED (Adobe ID Created) students marked done, per quarter (null = no registered students)
+      cpdQuarterlyPct,       // % of this school's REGISTERED (Adobe ID Created) teachers marked done, per quarter (null = no registered teachers)
       mauParticipationOfEnrolledPct, // % of TOTAL ENROLLED students who did MAU, per quarter (null = enrollment not recorded)
       cpdParticipationOfEnrolledPct, // % of TOTAL ENROLLED teachers who did CPD, per quarter (null = enrollment not recorded)
       studentActivityParticipation, // registered/participated/pct for Hackathon, AI Playground, Skills Studio, Adobe ID Created/Activated, Certificate Received — keyed by field name
@@ -270,6 +290,8 @@ const buildAnalyticsSnapshot = async ({ adminId } = {}) => {
   const buildGeoRollup = (rows) => {
     const totalStudents = rows.reduce((sum, r) => sum + r.studentCount, 0);
     const totalTeachers = rows.reduce((sum, r) => sum + r.teacherCount, 0);
+    const totalTrackedStudents = rows.reduce((sum, r) => sum + r.totalTrackedStudents, 0);
+    const totalTrackedTeachers = rows.reduce((sum, r) => sum + r.totalTrackedTeachers, 0);
 
     const activityPct = {};
     ACTIVITY_FIELDS.forEach(f => {
@@ -341,15 +363,20 @@ const buildAnalyticsSnapshot = async ({ adminId } = {}) => {
     // Registered-vs-participated rollup for the one-time flat activities
     // (Hackathon, AI Playground, Skills Studio, Adobe ID, Certificate) —
     // student/teacher-weighted the same way as mauQuarterlyPct/cpdQuarterlyPct above.
+    // EXCEPTION: "adobeIdCreated" is measured against totalTrackedStudents/Teachers
+    // (everyone entered), not the registered subset — same reasoning as the
+    // per-school computation above (see "studentActivityParticipation" comment there).
     const studentActivityParticipation = {};
     STUDENT_FLAT_ACTIVITIES.forEach(a => {
+      const base = a.key === 'adobeIdCreated' ? totalTrackedStudents : totalStudents;
       const participated = rows.reduce((sum, r) => sum + r.studentActivityParticipation[a.key].participated, 0);
-      studentActivityParticipation[a.key] = { label: a.label, registered: totalStudents, participated, pct: pct(participated, totalStudents) };
+      studentActivityParticipation[a.key] = { label: a.label, registered: base, participated, pct: pct(participated, base) };
     });
     const teacherActivityParticipation = {};
     TEACHER_FLAT_ACTIVITIES.forEach(a => {
+      const base = a.key === 'adobeIdCreated' ? totalTrackedTeachers : totalTeachers;
       const participated = rows.reduce((sum, r) => sum + r.teacherActivityParticipation[a.key].participated, 0);
-      teacherActivityParticipation[a.key] = { label: a.label, registered: totalTeachers, participated, pct: pct(participated, totalTeachers) };
+      teacherActivityParticipation[a.key] = { label: a.label, registered: base, participated, pct: pct(participated, base) };
     });
 
     // Student+teacher-weighted Monthly DCAIS Curriculum completion — same
@@ -368,8 +395,10 @@ const buildAnalyticsSnapshot = async ({ adminId } = {}) => {
 
     return {
       schools:            rows.length,
-      students:           totalStudents,
-      teachers:           totalTeachers,
+      students:           totalStudents, // REGISTERED (Adobe ID Created) students only
+      teachers:           totalTeachers, // REGISTERED (Adobe ID Created) teachers only
+      totalTrackedStudents, // every student entered, regardless of Adobe ID — for "how many students are entered/tracked" questions, not "registered"
+      totalTrackedTeachers,
       enrolledStudents:   totalEnrolledStudents, // sum of schools' self-reported TOTAL enrollment (only where recorded)
       enrolledTeachers:   totalEnrolledTeachers,
       inactiveSchools:     rows.filter(r => r.inactive).length,
@@ -377,8 +406,8 @@ const buildAnalyticsSnapshot = async ({ adminId } = {}) => {
       allActivitiesCompleteSchools: rows.filter(r => r.allActivitiesComplete).length,
       activityCompletionPct: activityPct, // % of schools in this group with each activity flag = Yes
       cpdTrainingLevelCounts: cpdLevelCounts,
-      mauQuarterlyPct,     // student-weighted % of TRACKED students marked done, per quarter
-      cpdQuarterlyPct,     // teacher-weighted % of TRACKED teachers marked done, per quarter
+      mauQuarterlyPct,     // student-weighted % of REGISTERED (Adobe ID Created) students marked done, per quarter
+      cpdQuarterlyPct,     // teacher-weighted % of REGISTERED (Adobe ID Created) teachers marked done, per quarter
       mauParticipationOfEnrolledPct, // % of TOTAL ENROLLED students who did MAU, per quarter
       cpdParticipationOfEnrolledPct, // % of TOTAL ENROLLED teachers who did CPD, per quarter
       studentActivityParticipation, // registered/participated/pct for Hackathon, AI Playground, Skills Studio, Adobe ID Created/Activated, Certificate Received
@@ -452,8 +481,9 @@ const buildAnalyticsSnapshot = async ({ adminId } = {}) => {
   // requires 100% of every elapsed month for everyone. "Adopted" is a much
   // lower bar: a school with just one student partway through counts here,
   // even though it's nowhere near fully caught up.
+  // Scoped to REGISTERED (Adobe ID Created) students/teachers, same as dcaisPctByMonth.
   const adoptionMonths = elapsedMonthKeysFY();
-  const hasAnyDcais = (arr) => (arr || []).some(person => adoptionMonths.some(m => person.dcaisMonthly?.[m]));
+  const hasAnyDcais = (arr) => (arr || []).some(person => person.adobeIdCreated && adoptionMonths.some(m => person.dcaisMonthly?.[m]));
   const schoolsAdoptedMonthlyDcais = schoolRows
     .filter((r, i) => hasAnyDcais(schools[i].studentsActivity) || hasAnyDcais(schools[i].teachersActivity))
     .map(r => ({ schoolName: r.schoolName, state: r.state, district: r.district, assignedAdmin: r.assignedAdmin }));
@@ -537,17 +567,18 @@ const buildAnalyticsSnapshot = async ({ adminId } = {}) => {
   // DIFFERENT question from "missed the latest quarter" (which doesn't care
   // whether they did the one before it) and from "not 100% across all elapsed
   // quarters" — it specifically means they dropped off between the two most
-  // recent quarters.
+  // recent quarters. Scoped to REGISTERED (Adobe ID Created) students/teachers,
+  // same as mauQuarterlyPct/cpdQuarterlyPct.
   const studentsMauDroppedQoQ = [];
   const teachersCpdDroppedQoQ = [];
   if (prevQ) {
     schools.forEach(s => {
-      (s.studentsActivity || []).forEach(st => {
+      (s.studentsActivity || []).filter(st => st.adobeIdCreated).forEach(st => {
         if (st.mauQuarterly?.[prevQ] && !st.mauQuarterly?.[latestQ]) {
           studentsMauDroppedQoQ.push({ name: st.name, class: st.class, section: st.section, schoolName: s.schoolName, state: normaliseState(s.address?.state) });
         }
       });
-      (s.teachersActivity || []).forEach(t => {
+      (s.teachersActivity || []).filter(t => t.adobeIdCreated).forEach(t => {
         if (t.cpdQuarterly?.[prevQ] && !t.cpdQuarterly?.[latestQ]) {
           teachersCpdDroppedQoQ.push({ name: t.name, schoolName: s.schoolName, state: normaliseState(s.address?.state) });
         }
@@ -560,6 +591,12 @@ const buildAnalyticsSnapshot = async ({ adminId } = {}) => {
   // — "participated"/"notParticipated" per activity, keyed by field name, so
   // "which students participated in X, name them" and "which students haven't
   // done X yet" both have a ready answer instead of reading as untracked.
+  // Scoped to REGISTERED (Adobe ID Created) students/teachers only — a student
+  // with no Adobe ID can't have actually done any of these, so including them in
+  // "notParticipated" would just be noise, not a real follow-up list. EXCEPTION:
+  // "adobeIdCreated" itself covers EVERY tracked student/teacher regardless of
+  // registration status, since it IS the registration step — its
+  // "notParticipated" list is exactly "who still needs an Adobe ID created".
   const studentFlatActivity = {};
   STUDENT_FLAT_ACTIVITIES.forEach(a => { studentFlatActivity[a.key] = { label: a.label, participated: [], notParticipated: [] }; });
   const teacherFlatActivity = {};
@@ -567,12 +604,14 @@ const buildAnalyticsSnapshot = async ({ adminId } = {}) => {
   schools.forEach(s => {
     (s.studentsActivity || []).forEach(st => {
       STUDENT_FLAT_ACTIVITIES.forEach(a => {
+        if (a.key !== 'adobeIdCreated' && !st.adobeIdCreated) return; // not registered — can't have done this
         const entry = { name: st.name, class: st.class, section: st.section, schoolName: s.schoolName, state: normaliseState(s.address?.state) };
         (st[a.key] ? studentFlatActivity[a.key].participated : studentFlatActivity[a.key].notParticipated).push(entry);
       });
     });
     (s.teachersActivity || []).forEach(t => {
       TEACHER_FLAT_ACTIVITIES.forEach(a => {
+        if (a.key !== 'adobeIdCreated' && !t.adobeIdCreated) return;
         const entry = { name: t.name, schoolName: s.schoolName, state: normaliseState(s.address?.state) };
         (t[a.key] ? teacherFlatActivity[a.key].participated : teacherFlatActivity[a.key].notParticipated).push(entry);
       });
@@ -584,16 +623,17 @@ const buildAnalyticsSnapshot = async ({ adminId } = {}) => {
   // students/teachers completed X, name them" questions. Names/classes ARE
   // tracked (studentsActivity.name/class/section) — this exists so the LLM has
   // them ready-to-hand instead of needing to be told they're available.
+  // Scoped to REGISTERED (Adobe ID Created) students/teachers, same as dcaisPctByMonth.
   const elapsedMonths = elapsedMonthKeysFY();
   const studentsMonthlyDcaisComplete = [];
   const teachersMonthlyDcaisComplete = [];
   schools.forEach(s => {
-    (s.studentsActivity || []).forEach(st => {
+    (s.studentsActivity || []).filter(st => st.adobeIdCreated).forEach(st => {
       if (elapsedMonths.every(m => st.dcaisMonthly?.[m])) {
         studentsMonthlyDcaisComplete.push({ name: st.name, class: st.class, section: st.section, schoolName: s.schoolName, state: normaliseState(s.address?.state) });
       }
     });
-    (s.teachersActivity || []).forEach(t => {
+    (s.teachersActivity || []).filter(t => t.adobeIdCreated).forEach(t => {
       if (elapsedMonths.every(m => t.dcaisMonthly?.[m])) {
         teachersMonthlyDcaisComplete.push({ name: t.name, schoolName: s.schoolName, state: normaliseState(s.address?.state) });
       }
@@ -603,16 +643,17 @@ const buildAnalyticsSnapshot = async ({ adminId } = {}) => {
   // Same idea for the quarterly components, at individual granularity — students
   // fully caught up on MAU, teachers fully caught up on CPD, through the elapsed
   // fiscal-year quarters.
+  // Scoped to REGISTERED (Adobe ID Created) students/teachers, same as mauQuarterlyPct/cpdQuarterlyPct.
   const elapsedQtrs = elapsedQuarterKeys();
   const studentsQuarterlyMauComplete = [];
   const teachersQuarterlyCpdComplete = [];
   schools.forEach(s => {
-    (s.studentsActivity || []).forEach(st => {
+    (s.studentsActivity || []).filter(st => st.adobeIdCreated).forEach(st => {
       if (elapsedQtrs.every(q => st.mauQuarterly?.[q])) {
         studentsQuarterlyMauComplete.push({ name: st.name, class: st.class, section: st.section, schoolName: s.schoolName, state: normaliseState(s.address?.state) });
       }
     });
-    (s.teachersActivity || []).forEach(t => {
+    (s.teachersActivity || []).filter(t => t.adobeIdCreated).forEach(t => {
       if (elapsedQtrs.every(q => t.cpdQuarterly?.[q])) {
         teachersQuarterlyCpdComplete.push({ name: t.name, schoolName: s.schoolName, state: normaliseState(s.address?.state) });
       }
@@ -627,14 +668,15 @@ const buildAnalyticsSnapshot = async ({ adminId } = {}) => {
   // q1-q2 right now) have realistically been reachable so far this fiscal year,
   // expect counts to cluster at or below that many; a student sitting at 3 or 4
   // this early would mean a quarter was marked before it started.
+  // Scoped to REGISTERED (Adobe ID Created) students/teachers, same as mauQuarterlyPct/cpdQuarterlyPct.
   const mauQuarterCountDistribution = { 0: [], 1: [], 2: [], 3: [], 4: [] };
   const cpdQuarterCountDistribution = { 0: [], 1: [], 2: [], 3: [], 4: [] };
   schools.forEach(s => {
-    (s.studentsActivity || []).forEach(st => {
+    (s.studentsActivity || []).filter(st => st.adobeIdCreated).forEach(st => {
       const count = QUARTERS.filter(q => st.mauQuarterly?.[q]).length;
       mauQuarterCountDistribution[count].push({ name: st.name, class: st.class, section: st.section, schoolName: s.schoolName, state: normaliseState(s.address?.state) });
     });
-    (s.teachersActivity || []).forEach(t => {
+    (s.teachersActivity || []).filter(t => t.adobeIdCreated).forEach(t => {
       const count = QUARTERS.filter(q => t.cpdQuarterly?.[q]).length;
       cpdQuarterCountDistribution[count].push({ name: t.name, schoolName: s.schoolName, state: normaliseState(s.address?.state) });
     });
@@ -646,15 +688,17 @@ const buildAnalyticsSnapshot = async ({ adminId } = {}) => {
   // quarters. This is the direct answer to "who missed the latest CPD/MAU
   // session" — that data already exists per-teacher/student, it just wasn't
   // being surfaced as its own list before.
+  // Scoped to REGISTERED (Adobe ID Created) students/teachers, same as mauQuarterlyPct/
+  // cpdQuarterlyPct — this is the list the "target"/gap definition relies on.
   const teachersMissedLatestCpd = [];
   const studentsMissedLatestMau = [];
   schools.forEach(s => {
-    (s.teachersActivity || []).forEach(t => {
+    (s.teachersActivity || []).filter(t => t.adobeIdCreated).forEach(t => {
       if (!t.cpdQuarterly?.[currentQuarter]) {
         teachersMissedLatestCpd.push({ name: t.name, schoolName: s.schoolName, state: normaliseState(s.address?.state) });
       }
     });
-    (s.studentsActivity || []).forEach(st => {
+    (s.studentsActivity || []).filter(st => st.adobeIdCreated).forEach(st => {
       if (!st.mauQuarterly?.[currentQuarter]) {
         studentsMissedLatestMau.push({ name: st.name, class: st.class, section: st.section, schoolName: s.schoolName, state: normaliseState(s.address?.state) });
       }
@@ -673,12 +717,12 @@ const buildAnalyticsSnapshot = async ({ adminId } = {}) => {
   const teachersCpdSubmittedToday = [];
   const studentsMauSubmittedToday = [];
   schools.forEach(s => {
-    (s.teachersActivity || []).forEach(t => {
+    (s.teachersActivity || []).filter(t => t.adobeIdCreated).forEach(t => {
       if (importedToday(t.importedAt) && t.cpdQuarterly?.[currentQuarter]) {
         teachersCpdSubmittedToday.push({ name: t.name, schoolName: s.schoolName, state: normaliseState(s.address?.state), importedAt: t.importedAt });
       }
     });
-    (s.studentsActivity || []).forEach(st => {
+    (s.studentsActivity || []).filter(st => st.adobeIdCreated).forEach(st => {
       if (importedToday(st.importedAt) && st.mauQuarterly?.[currentQuarter]) {
         studentsMauSubmittedToday.push({ name: st.name, class: st.class, section: st.section, schoolName: s.schoolName, state: normaliseState(s.address?.state), importedAt: st.importedAt });
       }
@@ -714,7 +758,7 @@ const buildAnalyticsSnapshot = async ({ adminId } = {}) => {
   teachersNotEngagedRecently.sort((a, b) => b.daysSinceLastRecordUpdate - a.daysSinceLastRecordUpdate);
   studentsNotEngagedRecently.sort((a, b) => b.daysSinceLastRecordUpdate - a.daysSinceLastRecordUpdate);
 
-  // Nationwide (all-schools) version of the TRACKED mauQuarterlyPct/cpdQuarterlyPct
+  // Nationwide (all-schools) version of the REGISTERED (Adobe ID Created) mauQuarterlyPct/cpdQuarterlyPct
   // already computed per-school and per-state/district/city — this is the number
   // to reach for any time a question wants ONE overall "current MAU/CPD %" figure
   // without asking specifically about enrollment, so there's never a reason to
@@ -761,17 +805,23 @@ const buildAnalyticsSnapshot = async ({ adminId } = {}) => {
   });
 
   // Nationwide registered-vs-participated for the one-time flat activities.
+  // EXCEPTION: "adobeIdCreated" is measured against everyone tracked, not just
+  // the registered subset — see the per-school computation's comment for why.
   const nationalStudents = schoolRows.reduce((sum, r) => sum + r.studentCount, 0);
   const nationalTeachers = schoolRows.reduce((sum, r) => sum + r.teacherCount, 0);
+  const nationalTrackedStudents = schoolRows.reduce((sum, r) => sum + r.totalTrackedStudents, 0);
+  const nationalTrackedTeachers = schoolRows.reduce((sum, r) => sum + r.totalTrackedTeachers, 0);
   const studentActivityParticipation = {};
   STUDENT_FLAT_ACTIVITIES.forEach(a => {
+    const base = a.key === 'adobeIdCreated' ? nationalTrackedStudents : nationalStudents;
     const participated = schoolRows.reduce((sum, r) => sum + r.studentActivityParticipation[a.key].participated, 0);
-    studentActivityParticipation[a.key] = { label: a.label, registered: nationalStudents, participated, pct: pct(participated, nationalStudents) };
+    studentActivityParticipation[a.key] = { label: a.label, registered: base, participated, pct: pct(participated, base) };
   });
   const teacherActivityParticipation = {};
   TEACHER_FLAT_ACTIVITIES.forEach(a => {
+    const base = a.key === 'adobeIdCreated' ? nationalTrackedTeachers : nationalTeachers;
     const participated = schoolRows.reduce((sum, r) => sum + r.teacherActivityParticipation[a.key].participated, 0);
-    teacherActivityParticipation[a.key] = { label: a.label, registered: nationalTeachers, participated, pct: pct(participated, nationalTeachers) };
+    teacherActivityParticipation[a.key] = { label: a.label, registered: base, participated, pct: pct(participated, base) };
   });
 
   // "Repeat participants" — a student counts as a repeat when the SAME identity
@@ -812,10 +862,12 @@ const buildAnalyticsSnapshot = async ({ adminId } = {}) => {
     states:    byState.length,
     districts: new Set(schoolRows.map(r => `${r.state}::${r.district}`)).size,
     cities:    new Set(schoolRows.map(r => `${r.state}::${r.city}`)).size,
-    students:  schoolRows.reduce((sum, r) => sum + r.studentCount, 0),
-    teachers:  schoolRows.reduce((sum, r) => sum + r.teacherCount, 0),
-    mauQuarterlyPct: nationalMauQuarterlyPct, // THE nationwide "current MAU %" — % of TRACKED (registered) students done, per elapsed quarter. Use this by default.
-    cpdQuarterlyPct: nationalCpdQuarterlyPct, // THE nationwide "current CPD %" — % of TRACKED (registered) teachers done, per elapsed quarter. Use this by default.
+    students:  schoolRows.reduce((sum, r) => sum + r.studentCount, 0), // REGISTERED (Adobe ID Created) students only — see "registeredStudents" definition
+    teachers:  schoolRows.reduce((sum, r) => sum + r.teacherCount, 0), // REGISTERED (Adobe ID Created) teachers only
+    totalTrackedStudents: schoolRows.reduce((sum, r) => sum + r.totalTrackedStudents, 0), // every student entered, regardless of Adobe ID — NOT "registered"
+    totalTrackedTeachers: schoolRows.reduce((sum, r) => sum + r.totalTrackedTeachers, 0),
+    mauQuarterlyPct: nationalMauQuarterlyPct, // THE nationwide "current MAU %" — % of REGISTERED (Adobe ID Created) students done, per elapsed quarter. Use this by default.
+    cpdQuarterlyPct: nationalCpdQuarterlyPct, // THE nationwide "current CPD %" — % of REGISTERED (Adobe ID Created) teachers done, per elapsed quarter. Use this by default.
     dcaisPctByMonth: nationalDcaisPctByMonth, // nationwide DCAIS completion % broken out per month name — for "show monthly Jan-Dec %" / bar chart by month
     enrolledStudents: nationalEnrolledStudents, // sum of schools' self-reported TOTAL enrollment (only where recorded) — a separate, less reliable figure
     enrolledTeachers: nationalEnrolledTeachers,
@@ -1062,11 +1114,13 @@ const buildAnalyticsSnapshot = async ({ adminId } = {}) => {
     currentFiscalYear: fiscalYearLabel,
     currentQuarter,
     previousQuarter: prevQ, // the elapsed quarter just before currentQuarter, or null if currentQuarter is the first elapsed one this fiscal year
+    currentMonth: MONTH_LABELS[elapsedMonthKeysFY()[elapsedMonthKeysFY().length - 1]], // full name of the current elapsed fiscal-year month (e.g. "September") — use this to check "completed THIS month" questions against a school's "dcaisMonthsDue"
     definitions: {
+      crossTabulation: 'For "of the schools that satisfy A, how many also satisfy B" / "total X, and out of those how many Y" compound-breakdown questions, filter "schools[]" yourself against BOTH real conditions and count — e.g. "of the DCAIS-registered schools (activityFlags[\'DCAIS Participated\'] === \'Yes\'), how many completed this month\'s activity" means: filter to that subset, then within it count schools where "currentMonth" (top-level field, e.g. "September") does NOT appear in that school\'s "dcaisMonthsDue" array (an empty array means fully caught up, which trivially includes the current month). This is real computation over already-present fields, not fabrication — never decline a compound breakdown question just because no single pre-built list already answers it; combine the relevant fields/lists yourself and state both numbers (the total for A, and the count of A-and-B).',
       target: 'This database has no explicit numeric MAU/participation target field. Wherever a question asks about progress "against target" — including "how many more students/workshops/sessions are needed to reach target/100%" — treat the target as 100% of currently-REGISTERED (tracked) students/teachers having the relevant quarter marked done, and COMPUTE the actual gap number yourself: registered count minus the count already done this quarter (the "missed latest" lists — "studentsMissedLatestMau"/"teachersMissedLatestCpd" — ARE exactly that gap population, ready to use directly, e.g. their length is the number of additional students who\'d need to do the current MAU/workshop session to hit 100%). State the 100%-target assumption in one clause, then give the real number — never decline just because no field is literally named "target" or "gap".',
       inactiveSchool: 'A school is counted as "inactive" if its current pipeline status is New or Contacted — i.e. no real engagement/data-collection activity has started yet.',
       allActivitiesComplete: 'True only if every one of the 9 tracked Yes/No activity flags is Yes for that school. This is a DIFFERENT thing from Monthly DCAIS Curriculum completion — see "schoolsMonthlyDcaisComplete" for that.',
-      schoolsMonthlyDcaisComplete: 'TWO different Monthly DCAIS Curriculum lists exist — do not confuse them. "schoolsAdoptedMonthlyDcais" is the low bar: any school with AT LEAST ONE student or teacher who has done AT LEAST ONE elapsed fiscal-year month — use this for "which schools have adopted/started/taken up the monthly DCAIS curriculum" questions. "schoolsMonthlyDcaisComplete" is the high bar: 100% of every elapsed month done, for every student AND teacher at that school — use this only for "which schools are fully caught up / 100% complete" questions. Use these lists directly, never compute either yourself from schools[].healthComponents.',
+      schoolsMonthlyDcaisComplete: 'THREE different "DCAIS" concepts exist — do not confuse them. (1) "DCAIS registered/participated" means the simple SCHOOL-LEVEL flag "activityFlags[\'DCAIS Participated\']" === \'Yes\' on a school in schools[] — a one-time, school-wide confirmation, unrelated to any individual student/teacher activity; a school can have this flag Yes with zero individually-tracked students/teachers. (2) "schoolsAdoptedMonthlyDcais" is a completely different, INDIVIDUAL-level low bar: any school with AT LEAST ONE student or teacher who has done AT LEAST ONE elapsed fiscal-year month of the monthly curriculum — use this only for "which schools have adopted/started/taken up the MONTHLY DCAIS CURRICULUM" questions, never for a plain "DCAIS registered" question. (3) "schoolsMonthlyDcaisComplete" is the individual-level HIGH bar: 100% of every elapsed month done, for every student AND teacher at that school — use this only for "which schools are fully caught up / 100% complete" questions. Use the pre-computed lists/flags directly, never compute any of these yourself from schools[].healthComponents.',
       dcaisPctByMonth: '"dcaisMonthlyPct" (on schools[], every state/district/city row, and "totals") is ONE blended completion % across ALL elapsed fiscal-year months combined. "dcaisPctByMonth" (same locations) is the SAME underlying data but broken out per individual month name (e.g. "April": 92.3, "May": 85.1, …) — use THIS for any "show monthly Jan-Dec %", "month-by-month DCAIS", or "chart/table of DCAIS by month" question, with visualization.type "bar" (categories = the month names present in the object, one series named for the school/state/nationwide) or "table". Never say a monthly breakdown "isn\'t available" or report only the single blended number when a breakdown was asked for.',
       repeatParticipants: 'A student is a "repeat participant" when the SAME identity — name + class + fiscal year, within the same school — appears as more than one row in Students Activity (a teacher: name + fiscal year, within the same school); this is almost always the bulk-import flow appending a duplicate row instead of updating the existing person\'s. For "% of students/teachers are repeat participants" use "totals.studentsRepeatPct" / "totals.teachersRepeatPct" (% of DISTINCT people who have a duplicate) — NOT "studentsDuplicateRowsPct"/"teachersDuplicateRowsPct" (a different number: % of ALL rows that are extra copies) — state which one you\'re reporting if there\'s any ambiguity in how the question was phrased. For names, use "studentsRepeatParticipants" / "teachersRepeatParticipants" (top level), each with "occurrences" (how many times they appear). Never say repeat participation isn\'t tracked — compute it from these fields, never by scanning schools[] yourself.',
       quarterCountDistribution: 'For "how many students/teachers did 1/2/3/4 quarterly activities" or "distribution of students by number of quarters completed" questions, use "totals.studentsByMauQuarterCount" / "totals.teachersByCpdQuarterCount" directly — {"0": n, "1": n, "2": n, "3": n, "4": n}, the count of students/teachers with EXACTLY that many of the four quarters (q1-q4) marked done. For names in a specific bucket, use "mauQuarterCountDistribution"/"cpdQuarterCountDistribution" (top level) the same way, keyed "0"-"4". This is DIFFERENT from "studentsQuarterlyMauComplete" (only ALL elapsed quarters) and "teachersMissedLatestCpd" (only the single latest quarter) — this is a full histogram across every possible count. Since only "currentFiscalYear"\'s elapsed quarters (see "currentQuarter") have realistically been reachable so far, expect most people to sit at or below that count; anyone above it means a future quarter was marked prematurely — worth flagging if it comes up, not hiding. Never say this distribution isn\'t tracked.',
@@ -1086,11 +1140,11 @@ const buildAnalyticsSnapshot = async ({ adminId } = {}) => {
       submittedToday: 'For "who submitted/completed MAU or CPD TODAY" (or "today\'s MAU/CPD achievement") questions, use "teachersCpdSubmittedToday" / "studentsMauSubmittedToday" directly — these list every teacher/student whose current-quarter flag was set by a bulk import that ran earlier today (per the "importedAt" timestamp stamped at import time), which is the only date information this system has for individual submissions. This can undercount: any row imported before this tracking was added, or on a day before today, has no way to be distinguished as "today" even if that\'s genuinely when it happened — mention that caveat briefly rather than presenting the count as exhaustive. Do not say daily submissions "aren\'t tracked" — they are, from today onward.',
       geoRollups: '"byState", "byDistrict", and "byCity" all carry the exact same metrics (schools, students, teachers, activityCompletionPct, mauQuarterlyPct, cpdQuarterlyPct, dcaisMonthlyPct, avgHealthScore, Green/Amber/Red counts, etc.) — just grouped at a different level. Use "byDistrict" directly for any district-wise question, "byCity" for any city-wise question — never try to derive district/city numbers yourself from "byState" or from schools[], they are pre-aggregated exactly for this. "dcaisMonthlyPct" is the Monthly DCAIS Curriculum completion for that state/district/city — use it for any "monthly" performance/target question at that level, alongside mauQuarterlyPct/cpdQuarterlyPct for "quarterly" questions.',
       mauQuarterlyPct: '"mauQuarterlyPct" and "cpdQuarterlyPct" (on schools[] and on every state/district/city row) only include keys for fiscal-year quarters that have already started (e.g. only q1 and q2 right now) — future quarters are deliberately left out entirely rather than shown as a misleading 0%, since they simply haven\'t happened yet. Only report the quarters actually present in the object; never fabricate or assume 0% for a quarter that\'s missing.',
-      registeredStudents: '"Registered" students/teachers means the individuals actually entered as rows in Students Activity / Teachers Activity — i.e. "studentCount"/"teacherCount" (on schools[] and every state/district/city row) and "students"/"teachers" (in "totals"). For ANY "% of students/teachers who participated/did MAU/did CPD/current MAU rate" question — whether or not it says "registered" — use "mauQuarterlyPct" / "cpdQuarterlyPct" directly: per elapsed quarter on schools[] and every state/district/city row for a specific school/state/district/city, or "totals.mauQuarterlyPct"/"totals.cpdQuarterlyPct" for ONE overall nationwide figure (e.g. a forecast/run-rate/trend question that needs a single current % to work from). This is the DEFAULT participation percentage. Do NOT use "enrolledStudentCount"/"enrolledTeacherCount" or "mauParticipationOfEnrolledPct"/"cpdParticipationOfEnrolledPct" (including "totals.mauParticipationOfEnrolledPct") unless a question explicitly asks about the school\'s self-reported "enrollment" or "capacity" — that figure is separate, less reliable (often stale or unrelated to actual tracked activity), and reads misleadingly small since it divides by total headcount rather than tracked students.',
+      registeredStudents: '"Registered" students/teachers means Adobe ID Created = Yes ("adobeIdCreated" on a person\'s record) — NOT simply "entered as a row in Students/Teachers Activity". The reasoning: a student/teacher can\'t actually perform any tracked activity (MAU, CPD, DCAIS, Hackathon, AI Playground, Skills Studio, Certificate) without an Adobe ID, so every population/percentage question uses this as the base. "studentCount"/"teacherCount" (on schools[], every state/district/city row) and "students"/"teachers" (in "totals") ALL already reflect this — they are the REGISTERED (Adobe-ID) counts, not raw tracked-row counts. For a plain "how many registered students/teachers" headcount question, use these directly (or list them by filtering schools[].studentsActivity/teachersActivity to "adobeIdCreated === true" for names). For ANY "% of registered students/teachers who participated/did MAU/did CPD/current MAU rate/did Hackathon/etc." question — whether or not it says "registered" — use "mauQuarterlyPct"/"cpdQuarterlyPct" (quarterly) or "studentActivityParticipation"/"teacherActivityParticipation" (one-time flat activities) directly: these are ALREADY computed against the registered population, per elapsed quarter on schools[]/state/district/city rows, or "totals.mauQuarterlyPct"/"totals.cpdQuarterlyPct"/"totals.studentActivityParticipation" for ONE overall nationwide figure. Never recompute these yourself against the raw tracked-row count. If a question instead explicitly asks how many students/teachers are just ENTERED/TRACKED regardless of Adobe ID status (a different, less common question), use "totalTrackedStudents"/"totalTrackedTeachers" (same locations) — do not confuse the two. Do NOT use "enrolledStudentCount"/"enrolledTeacherCount" or "mauParticipationOfEnrolledPct"/"cpdParticipationOfEnrolledPct" (including "totals.mauParticipationOfEnrolledPct") unless a question explicitly asks about the school\'s self-reported "enrollment" or "capacity" — that figure is separate, less reliable, and unrelated to Adobe ID/registration status.',
       cpdVsCpdLevel: 'Two DIFFERENT "CPD" things exist — do not confuse them. "cpdQuarterlyPct" (on schools[] and every state/district/city row) is teacher CPD TRAINING COMPLETION per quarter, as a percentage — use this for any "CPD completion" / "teacher CPD" question. "cpdTrainingLevel" (per school) and "cpdTrainingLevelCounts" (per state/district/city) are a separate CPD1/CPD2/CPD3/CPD4/None CERTIFICATION LEVEL classification, unrelated to completion percentage — only use these for a question explicitly about "CPD level" or "CPD1/2/3/4".',
       qoqTrend: '"mauQoQ" and "cpdQoQ" are pre-computed quarter-on-quarter comparisons between the two most recently elapsed fiscal-year quarters (e.g. Q1 vs Q2 right now) — "mauQoQ" for Student MAU/engagement, "cpdQoQ" for Teacher CPD. Each has "declined" (schools whose % dropped, worst first) and "improved" (schools whose % rose, best first) arrays, each entry with previousQuarter/previousQuarterPct/latestQuarter/latestQuarterPct/changePts already computed — use these directly for any "declined/improved/dropped quarter-on-quarter" question, never say this isn\'t tracked or try to compare schools[] quarters yourself. If "comparable" is false, fewer than 2 quarters have elapsed yet this fiscal year, so say that instead.',
       droppedQoQ: 'For "who did [previous quarter] but not [latest quarter]" / "who participated in Q1 but not Q2" / "which students-teachers dropped off between the last two quarters" questions — an INDIVIDUAL-level question, different from "mauQoQ"/"cpdQoQ" (which are school-level % comparisons) and from "missedLatestCpd/Mau" (which doesn\'t care about the quarter before) — use "studentsMauDroppedQoQ" / "teachersCpdDroppedQoQ" directly: every entry there did "previousQuarter" (see top-level "previousQuarter" field) but not "currentQuarter". Never scan schools[].studentsActivity/teachersActivity yourself for this, and never say it isn\'t tracked. If "previousQuarter" is null, fewer than 2 quarters have elapsed this fiscal year, so say that instead.',
-      flatActivities: 'Beyond MAU (quarterly)/CPD (quarterly)/DCAIS (monthly), five more activities are tracked per INDIVIDUAL student — Annual Hackathon, AI Playground, Skills Studio, Adobe ID Created, Adobe ID Activated, Certificate Received — plus one for teachers (Certificate Received). These are ONE-TIME flags (not split by quarter/month). For "how many registered vs participated in [Hackathon/AI Playground/Skills Studio/Adobe ID/Certificate]" or "% of students/teachers who did X" questions, use "studentActivityParticipation"/"teacherActivityParticipation" directly — present per school (on schools[]), per state/district/city rollup, and nationwide in "totals" — each keyed by field name (e.g. "hackathonParticipated") with {label, registered, participated, pct} already computed; "registered" there is the same TRACKED count as studentCount/teacherCount, never the school-profile enrollment field. For "which students/teachers participated in X, name them" or "who HASN\'T done X yet", use "studentFlatActivity"/"teacherFlatActivity" (same keys, each with "participated" and "notParticipated" name arrays) directly. Never say Hackathon/AI Playground/Skills Studio/Adobe ID/Certificate participation "isn\'t tracked at student level" — these fields ARE that tracking. Note these are DIFFERENT from the school-level "hackathonRegistered"/"aiPlaygroundDone"/"skillsStudioDone" flags in "activityFlags" (whether the SCHOOL did it at all, not individual participation).',
+      flatActivities: 'Beyond MAU (quarterly)/CPD (quarterly)/DCAIS (monthly), five more activities are tracked per INDIVIDUAL student — Annual Hackathon, AI Playground, Skills Studio, Adobe ID Created, Adobe ID Activated, Certificate Received — plus one for teachers (Certificate Received). These are ONE-TIME flags (not split by quarter/month). For "how many registered vs participated in [Hackathon/AI Playground/Skills Studio/Adobe ID Activated/Certificate]" or "% of students/teachers who did X" questions, use "studentActivityParticipation"/"teacherActivityParticipation" directly — present per school (on schools[]), per state/district/city rollup, and nationwide in "totals" — each keyed by field name (e.g. "hackathonParticipated") with {label, registered, participated, pct} already computed; "registered" there means Adobe-ID-registered (see "registeredStudents" definition), never the school-profile enrollment field. EXCEPTION: the "adobeIdCreated" entry itself is measured against EVERY tracked student/teacher, not the registered subset — it IS the registration step, so its "registered" field there means total TRACKED count instead (measuring it against itself would be circular, always 100%). For "which students/teachers participated in X, name them" or "who HASN\'T done X yet", use "studentFlatActivity"/"teacherFlatActivity" (same keys, each with "participated" and "notParticipated" name arrays) directly — "adobeIdCreated"\'s "notParticipated" list is exactly "who still needs an Adobe ID created" (covers everyone tracked); every other activity\'s lists only cover already-registered students/teachers. Never say Hackathon/AI Playground/Skills Studio/Adobe ID/Certificate participation "isn\'t tracked at student level" — these fields ARE that tracking. Note these are DIFFERENT from the school-level "hackathonRegistered"/"aiPlaygroundDone"/"skillsStudioDone" flags in "activityFlags" (whether the SCHOOL did it at all, not individual participation).',
     },
     totals,
     overallActivityCompletionPct,

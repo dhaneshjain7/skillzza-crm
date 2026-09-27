@@ -10,6 +10,7 @@ const AddSchoolModal = ({ onClose, onCreated }) => {
   const [form, setForm] = useState({
     schoolName: '', udiseCode: '', email: '', phone: '', altPhone: '', website: '',
     board: '', schoolType: '', studentCount: '', staffCount: '',
+    spoc: '', spocPhone: '', spocEmail: '',
     'address.street': '', 'address.city': '', 'address.district': '', 'address.state': '', 'address.pincode': '',
     'principal.name': '', 'principal.email': '', 'principal.phone': '',
   });
@@ -57,8 +58,12 @@ const AddSchoolModal = ({ onClose, onCreated }) => {
     e.preventDefault();
     setError('');
 
-    if (!form.schoolName || !form.udiseCode || !form.email || !form.phone) {
-      setError('School Name, UDISE Code, Email and Phone are required.');
+    if (!form.schoolName || !form.udiseCode || !form.email || !form.phone || !form.spoc || !form.spocPhone || !form.spocEmail) {
+      setError('School Name, UDISE Code, Email, Phone, SPOC Name, SPOC Phone and SPOC Email are required.');
+      return;
+    }
+    if (!/^\d{10}$/.test(form.spocPhone.trim())) {
+      setError('SPOC Phone must be exactly 10 digits.');
       return;
     }
 
@@ -86,6 +91,9 @@ const AddSchoolModal = ({ onClose, onCreated }) => {
         schoolType:          form.schoolType,
         studentCount:        form.studentCount    ? Number(form.studentCount)    : undefined,
         staffCount:          form.staffCount      ? Number(form.staffCount)      : undefined,
+        spoc:                form.spoc,
+        spocPhone:           form.spocPhone,
+        spocEmail:           form.spocEmail,
         address: {
           street:   form['address.street'],
           city:     form['address.city'],
@@ -336,6 +344,14 @@ const AddSchoolModal = ({ onClose, onCreated }) => {
               <Field label="Student Count (6-12)" name="studentCount" value={form.studentCount} onChange={handleChange} type="number" />
               <Field label="Staff Count (6-12)" name="staffCount" value={form.staffCount} onChange={handleChange} type="number" />
             </Row>
+          </Section>
+
+          <Section title="School SPOC">
+            <Row>
+              <Field label="School SPOC *" name="spoc" value={form.spoc} onChange={handleChange} required />
+              <Field label="SPOC Phone *" name="spocPhone" value={form.spocPhone} onChange={handleChange} required placeholder="10-digit phone number" />
+            </Row>
+            <Field label="SPOC Email *" name="spocEmail" value={form.spocEmail} onChange={handleChange} required type="email" fullWidth />
           </Section>
 
           <Section title="Address">

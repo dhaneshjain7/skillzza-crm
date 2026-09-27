@@ -2,6 +2,17 @@ require('dotenv').config();
 const mongoose = require('mongoose');
 const { User, Role, Permission, Settings, School, SchoolStatusHistory } = require('../models');
 
+// Seed account credentials — override via .env in any shared/production
+// environment so real credentials never sit in git-tracked source. Falls back
+// to well-known local-dev defaults when unset, so `node config/seeder.js`
+// still works out of the box on a fresh local machine.
+const SEED_SUPERADMIN_EMAIL    = process.env.SEED_SUPERADMIN_EMAIL    || 'superadmin@skillzza.com';
+const SEED_SUPERADMIN_PASSWORD = process.env.SEED_SUPERADMIN_PASSWORD || 'Admin@1234';
+const SEED_ADMIN_EMAIL         = process.env.SEED_ADMIN_EMAIL         || 'admin@skillzza.com';
+const SEED_ADMIN_PASSWORD      = process.env.SEED_ADMIN_PASSWORD      || 'Admin@1234';
+const SEED_SCHOOL_EMAIL        = process.env.SEED_SCHOOL_EMAIL        || 'school@skillzza.com';
+const SEED_SCHOOL_PASSWORD     = process.env.SEED_SCHOOL_PASSWORD     || 'School@1234';
+
 const ROLES = [
   { name: 'superadmin',  displayName: 'Super Admin',  description: 'Full platform access, cannot be restricted' },
   { name: 'admin',       displayName: 'Admin',         description: 'School administrator — manages assigned schools only' },
@@ -88,49 +99,49 @@ async function seed() {
   if (!superAdmin) {
     superAdmin = await User.create({
       name:     'Super Admin',
-      email:    'superadmin@skillzza.com',
-      password: 'Admin@1234',
+      email:    SEED_SUPERADMIN_EMAIL,
+      password: SEED_SUPERADMIN_PASSWORD,
       role:     'superadmin',
       isActive: true,
     });
-    console.log('✓  SuperAdmin created  →  superadmin@skillzza.com  /  Admin@1234');
+    console.log(`✓  SuperAdmin created  →  ${SEED_SUPERADMIN_EMAIL}  /  ${SEED_SUPERADMIN_PASSWORD}`);
     console.log('   ⚠️  Change this password after first login!\n');
   } else {
     console.log('✓  SuperAdmin already exists — skipped');
   }
 
   // ── Admin ─────────────────────────────────────────────────────────────────
-  let adminUser = await User.findOne({ email: 'admin@skillzza.com' }).setOptions({ includeDeleted: true });
+  let adminUser = await User.findOne({ email: SEED_ADMIN_EMAIL }).setOptions({ includeDeleted: true });
   if (!adminUser) {
     adminUser = await User.create({
       name:     'Rajesh Kumar',
-      email:    'admin@skillzza.com',
-      password: 'Admin@1234',
+      email:    SEED_ADMIN_EMAIL,
+      password: SEED_ADMIN_PASSWORD,
       role:     'admin',
       isActive: true,
       phone:    '9876543210',
     });
-    console.log('✓  Admin created       →  admin@skillzza.com  /  Admin@1234');
+    console.log(`✓  Admin created       →  ${SEED_ADMIN_EMAIL}  /  ${SEED_ADMIN_PASSWORD}`);
   } else {
     console.log('✓  Admin already exists — skipped');
-    adminUser = await User.findOne({ email: 'admin@skillzza.com' });
+    adminUser = await User.findOne({ email: SEED_ADMIN_EMAIL });
   }
 
   // ── School User ───────────────────────────────────────────────────────────
-  let schoolUser = await User.findOne({ email: 'school@skillzza.com' }).setOptions({ includeDeleted: true });
+  let schoolUser = await User.findOne({ email: SEED_SCHOOL_EMAIL }).setOptions({ includeDeleted: true });
   if (!schoolUser) {
     schoolUser = await User.create({
       name:     'DPS Principal',
-      email:    'school@skillzza.com',
-      password: 'School@1234',
+      email:    SEED_SCHOOL_EMAIL,
+      password: SEED_SCHOOL_PASSWORD,
       role:     'school_user',
       isActive: true,
       phone:    '9123456780',
     });
-    console.log('✓  SchoolUser created  →  school@skillzza.com  /  School@1234');
+    console.log(`✓  SchoolUser created  →  ${SEED_SCHOOL_EMAIL}  /  ${SEED_SCHOOL_PASSWORD}`);
   } else {
     console.log('✓  SchoolUser already exists — skipped');
-    schoolUser = await User.findOne({ email: 'school@skillzza.com' });
+    schoolUser = await User.findOne({ email: SEED_SCHOOL_EMAIL });
   }
 
   // ── School (linked to admin + school_user) ────────────────────────────────
@@ -154,7 +165,7 @@ async function seed() {
       },
       principal: {
         name:  'DPS Principal',
-        email: 'school@skillzza.com',
+        email: SEED_SCHOOL_EMAIL,
         phone: '9123456780',
       },
     });
@@ -177,9 +188,9 @@ async function seed() {
   }
 
   console.log('\n── Login Credentials ─────────────────────────────────');
-  console.log('  SuperAdmin  →  superadmin@skillzza.com  /  Admin@1234');
-  console.log('  Admin       →  admin@skillzza.com       /  Admin@1234');
-  console.log('  SchoolUser  →  school@skillzza.com      /  School@1234');
+  console.log(`  SuperAdmin  →  ${SEED_SUPERADMIN_EMAIL}  /  ${SEED_SUPERADMIN_PASSWORD}`);
+  console.log(`  Admin       →  ${SEED_ADMIN_EMAIL}  /  ${SEED_ADMIN_PASSWORD}`);
+  console.log(`  SchoolUser  →  ${SEED_SCHOOL_EMAIL}  /  ${SEED_SCHOOL_PASSWORD}`);
   console.log('──────────────────────────────────────────────────────\n');
 
   await mongoose.disconnect();

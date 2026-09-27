@@ -129,6 +129,8 @@ const schoolSchema = new mongoose.Schema(
           nov: { type: Boolean, default: false },
           dec: { type: Boolean, default: false },
         },
+        adobeIdCreated:   { type: Boolean, default: false },
+        adobeIdActivated: { type: Boolean, default: false },
         certificateReceived: { type: Boolean, default: false },
         certificateLink:     { type: String, trim: true },
         remarks:             { type: String, trim: true },

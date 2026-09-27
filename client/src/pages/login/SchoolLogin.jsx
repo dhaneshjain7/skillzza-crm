@@ -8,7 +8,6 @@ const config = {
   pageBg: 'linear-gradient(135deg, #0f3329 0%, #1e5f4e 100%)',
   badgeBg: '#e8f5f1',
   allowRegister: true,
-  hint: 'school@skillzza.com / School@1234',
 };
 const SchoolLogin = () => <LoginPage roleConfig={config} />;
 export default SchoolLogin;

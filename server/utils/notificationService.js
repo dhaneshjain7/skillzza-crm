@@ -158,6 +158,27 @@ const notifyDocumentSent = async ({ school, document, sentBy, io }) => {
   }
 };
 
+// Notify every superadmin whenever a new school is created — via the Add
+// School modal, bulk import, self-registration, or first-time Google sign-in.
+const notifySchoolCreated = async ({ school, createdByLabel, io }) => {
+  // Never let a notification hiccup break the school-creation flow that
+  // triggered it — same "swallow and log" contract as createNotification.
+  try {
+    const superAdmins = await User.find({ role: 'superadmin', isActive: true }).select('_id');
+    await Promise.all(superAdmins.map(sa => createNotification({
+      recipientId:   sa._id,
+      recipientRole: 'superadmin',
+      triggerType:   'School Created',
+      title:         `New school added: ${school.schoolName}`,
+      message:       `${school.schoolName} was added${createdByLabel ? ` (${createdByLabel})` : ''}.`,
+      relatedSchool: school._id,
+      io,
+    })));
+  } catch (err) {
+    console.error('notifySchoolCreated error:', err.message);
+  }
+};
+
 const notifyPasswordChanged = async ({ user, io }) => {
   await createNotification({
     recipientId:   user._id,
@@ -180,5 +201,6 @@ module.exports = {
   notifyDocumentUploaded,
   notifyDocumentSent,
   notifyAdminAssigned,
+  notifySchoolCreated,
   notifyPasswordChanged,
 };

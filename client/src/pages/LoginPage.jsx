@@ -15,7 +15,7 @@ const LoginPage = ({ roleConfig }) => {
   const location  = useLocation();
 
   const [mode, setMode]         = useState('signin'); // 'signin' | 'register'
-  const [form, setForm]         = useState({ name: '', schoolName: '', udiseCode: '', phone: '', email: '', password: '', confirmPassword: '' });
+  const [form, setForm]         = useState({ name: '', schoolName: '', udiseCode: '', phone: '', spoc: '', spocPhone: '', spocEmail: '', email: '', password: '', confirmPassword: '' });
   const [error, setError]       = useState('');
   const [loading, setLoading]   = useState(false);
   const [showPass, setShowPass] = useState(false);
@@ -44,15 +44,16 @@ const LoginPage = ({ roleConfig }) => {
     e.preventDefault();
 
     if (isRegister) {
-      const { name, schoolName, udiseCode, phone, email, password, confirmPassword } = form;
-      if (!name || !schoolName || !udiseCode || !phone || !email || !password) {
+      const { name, schoolName, udiseCode, phone, spoc, spocPhone, spocEmail, email, password, confirmPassword } = form;
+      if (!name || !schoolName || !udiseCode || !phone || !spoc || !spocPhone || !spocEmail || !email || !password) {
         setError('All fields are required.'); return;
       }
+      if (!/^\d{10}$/.test(spocPhone.trim())) { setError('SPOC Phone must be exactly 10 digits.'); return; }
       if (password.length < 6) { setError('Password must be at least 6 characters.'); return; }
       if (password !== confirmPassword) { setError('Passwords do not match.'); return; }
 
       setLoading(true);
-      const result = await registerSchool({ name, schoolName, udiseCode, phone, email, password, confirmPassword });
+      const result = await registerSchool({ name, schoolName, udiseCode, phone, spoc, spocPhone, spocEmail, email, password, confirmPassword });
       setLoading(false);
 
       if (!result.success) { setError(result.message); return; }
@@ -179,6 +180,30 @@ const LoginPage = ({ roleConfig }) => {
                   style={s.input} autoComplete="tel"
                 />
               </div>
+              <div style={s.field}>
+                <label style={s.label}>School SPOC</label>
+                <input
+                  type="text" name="spoc" value={form.spoc}
+                  onChange={handleChange} placeholder="e.g. Rahul Sharma"
+                  style={s.input}
+                />
+              </div>
+              <div style={s.field}>
+                <label style={s.label}>SPOC Phone</label>
+                <input
+                  type="tel" name="spocPhone" value={form.spocPhone}
+                  onChange={handleChange} placeholder="10-digit phone number"
+                  style={s.input} maxLength={10}
+                />
+              </div>
+              <div style={s.field}>
+                <label style={s.label}>SPOC Email</label>
+                <input
+                  type="email" name="spocEmail" value={form.spocEmail}
+                  onChange={handleChange} placeholder="e.g. spoc@school.edu"
+                  style={s.input}
+                />
+              </div>
             </>
           )}
 
@@ -253,13 +278,6 @@ const LoginPage = ({ roleConfig }) => {
           </p>
         )}
 
-        {/* Hint credentials for dev */}
-        {roleConfig.hint && (
-          <div style={s.hint}>
-            <strong>Dev hint:</strong> {roleConfig.hint}
-          </div>
-        )}
-
         <p style={s.footer}>Skillzza CRM &copy; {new Date().getFullYear()} · Confidential</p>
       </div>
 
@@ -293,7 +311,6 @@ const s = {
   eyeBtn:    { position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', padding: 0 },
   forgotBtn: { alignSelf: 'flex-end', background: 'none', border: 'none', padding: 0, marginTop: '0.4rem', fontSize: '0.78rem', fontWeight: '600', color: '#64748b', cursor: 'pointer', textDecoration: 'underline', fontFamily: 'inherit' },
   submitBtn: { color: '#fff', border: 'none', borderRadius: '8px', padding: '0.75rem', fontSize: '1rem', fontWeight: '600', cursor: 'pointer', marginTop: '0.25rem', width: '100%', transition: 'opacity 0.2s' },
-  hint:      { marginTop: '1rem', background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '8px', padding: '0.625rem 0.875rem', fontSize: '0.78rem', color: '#475569' },
   footer:    { marginTop: '1.5rem', textAlign: 'center', fontSize: '0.72rem', color: '#94a3b8' },
   divider:   { display: 'flex', alignItems: 'center', gap: '0.75rem', margin: '1.25rem 0' },
   dividerLine: { flex: 1, height: '1px', background: '#e2e8f0' },

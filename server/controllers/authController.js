@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const { User, RefreshToken, ActivityLog, School, SchoolStatusHistory } = require('../models');
 const { sendTokens, generateAccessToken, REFRESH_COOKIE_OPTIONS } = require('../utils/generateTokens');
 const { verifyGoogleToken } = require('../utils/googleAuth');
-const { notifyPasswordChanged } = require('../utils/notificationService');
+const { notifyPasswordChanged, notifySchoolCreated } = require('../utils/notificationService');
 const { sendEmail } = require('../utils/emailService');
 
 const RESET_CODE_TTL_MINUTES = 10;
@@ -349,13 +349,17 @@ const resetPassword = async (req, res) => {
 // them in straight away — same flow as first-time Google Sign-In.
 const registerSchool = async (req, res) => {
   try {
-    const { name, schoolName, udiseCode, email, phone, password, confirmPassword } = req.body;
+    const { name, schoolName, udiseCode, email, phone, spoc, spocPhone, spocEmail, password, confirmPassword } = req.body;
 
-    if (!name || !schoolName || !udiseCode || !email || !phone || !password) {
+    if (!name || !schoolName || !udiseCode || !email || !phone || !spoc || !spocPhone || !spocEmail || !password) {
       return res.status(400).json({
         success: false,
-        message: 'Name, school name, UDISE code, email, phone and password are required.',
+        message: 'Name, school name, UDISE code, email, phone, SPOC name, SPOC phone, SPOC email and password are required.',
       });
+    }
+
+    if (!/^\d{10}$/.test(spocPhone.trim())) {
+      return res.status(400).json({ success: false, message: 'SPOC Phone must be exactly 10 digits.' });
     }
 
     if (password.length < 6) {
@@ -394,6 +398,9 @@ const registerSchool = async (req, res) => {
         udiseCode:     udiseCode.trim(),
         email:         normalizedEmail,
         phone:         phone.trim(),
+        spoc:          spoc.trim(),
+        spocPhone:     spocPhone.trim(),
+        spocEmail:     spocEmail.trim().toLowerCase(),
         address:       { city: 'Not set', state: 'Not set' },
         currentStatus: 'New',
         schoolUser:    newUser._id,
@@ -414,6 +421,8 @@ const registerSchool = async (req, res) => {
         description: `${newUser.name} self-registered ${school.schoolName}`,
         req,
       });
+
+      await notifySchoolCreated({ school, createdByLabel: 'self-registered', io: req.app.get('io') });
     } catch (err) {
       // Roll back the user account if the linked School couldn't be created —
       // otherwise they end up with a login but "No school linked" forever.
@@ -520,6 +529,8 @@ const googleAuthSchool = async (req, res) => {
         description: `${newUser.name} self-registered via Google Sign-In`,
         req,
       });
+
+      await notifySchoolCreated({ school, createdByLabel: 'self-registered via Google', io: req.app.get('io') });
     } catch (err) {
       // Roll back the user account if the linked School couldn't be created —
       // otherwise they end up with a login but "No school linked" forever.
