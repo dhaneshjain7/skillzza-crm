@@ -46,21 +46,28 @@ const createNotification = async ({
       });
     }
 
-    // 3. Send email if requested
+    // 3. Send email if requested — fire-and-forget. Awaiting an SMTP round
+    // trip here would make the response of whatever action triggered this
+    // notification (e.g. sending a chat message) wait on it too, and a slow
+    // or stalled SMTP connection (common on a cold serverless connection)
+    // would then surface as a false "failed" error on an action that
+    // actually already succeeded.
     if (sendEmailFlag) {
-      const recipient = await User.findById(recipientId).select('email notificationPrefs');
-      if (recipient?.notificationPrefs?.email !== false) {
-        const result = await sendEmail({
-          to:          recipient.email,
-          triggerType,
-          data:        { title, message, ...emailData },
-        });
-        if (result.sent) {
-          notification.emailSent   = true;
-          notification.emailSentAt = new Date();
-          await notification.save();
-        }
-      }
+      User.findById(recipientId).select('email notificationPrefs')
+        .then(async (recipient) => {
+          if (recipient?.notificationPrefs?.email === false) return;
+          const result = await sendEmail({
+            to:          recipient.email,
+            triggerType,
+            data:        { title, message, ...emailData },
+          });
+          if (result.sent) {
+            notification.emailSent   = true;
+            notification.emailSentAt = new Date();
+            await notification.save();
+          }
+        })
+        .catch((err) => console.error('createNotification email error:', err.message));
     }
 
     return notification;

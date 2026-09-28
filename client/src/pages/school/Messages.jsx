@@ -69,6 +69,9 @@ const Messages = () => {
     };
     const onTyping = ({ userId, isTyping }) => { if (userId !== user._id) setOtherTyping(isTyping); };
     const onRead = ({ readBy }) => { if (readBy !== user._id) setMessages(prev => prev.map(m => ({ ...m, isRead: true }))); };
+    const onMessageRead = ({ messageId }) => {
+      setMessages(prev => prev.map(m => m._id === messageId ? { ...m, isRead: true } : m));
+    };
     const onPinned = ({ messageId, isPinned }) => {
       setMessages(prev => prev.map(m => m._id === messageId ? { ...m, isPinned } : m));
       if (school) fetchPinned(school._id);
@@ -77,11 +80,13 @@ const Messages = () => {
     socket.on('new_message', onNewMessage);
     socket.on('user_typing', onTyping);
     socket.on('messages_read', onRead);
+    socket.on('message_read', onMessageRead);
     socket.on('message_pinned', onPinned);
     return () => {
       socket.off('new_message', onNewMessage);
       socket.off('user_typing', onTyping);
       socket.off('messages_read', onRead);
+      socket.off('message_read', onMessageRead);
       socket.off('message_pinned', onPinned);
     };
   }, [socket, school, user]);

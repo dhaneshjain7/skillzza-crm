@@ -82,9 +82,28 @@ const AdminMessages = () => {
     };
     const onTyping = ({ userId, isTyping }) => { if (userId !== user._id) setOtherTyping(isTyping); };
 
+    // Read receipts — fired when the OTHER party reads the messages I sent
+    // them (either one message via markRead, or the whole conversation via
+    // getMessages when they open it). Without these, the double-tick never
+    // appears on my own sent messages in this already-open tab.
+    const onMessageRead = ({ messageId }) => {
+      setMessages(prev => prev.map(m => m._id === messageId ? { ...m, isRead: true } : m));
+    };
+    const onMessagesRead = ({ schoolId, readBy }) => {
+      if (String(schoolId) !== String(activeSchool._id) || readBy === user._id) return;
+      setMessages(prev => prev.map(m => (m.sender?._id || m.sender) === user._id ? { ...m, isRead: true } : m));
+    };
+
     socket.on('new_message', onNewMsg);
     socket.on('user_typing', onTyping);
-    return () => { socket.off('new_message', onNewMsg); socket.off('user_typing', onTyping); };
+    socket.on('message_read', onMessageRead);
+    socket.on('messages_read', onMessagesRead);
+    return () => {
+      socket.off('new_message', onNewMsg);
+      socket.off('user_typing', onTyping);
+      socket.off('message_read', onMessageRead);
+      socket.off('messages_read', onMessagesRead);
+    };
   }, [socket, activeSchool, user]);
 
   // ── File selection ─────────────────────────────────────────────────────────
