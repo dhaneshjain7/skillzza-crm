@@ -107,20 +107,29 @@ const AdminMessages = () => {
 
   const handleSend = async (e) => {
     e.preventDefault();
-    if ((!content.trim() && !pendingFile) || !activeSchool || sending) return;
+    const text = content.trim();
+    const file = pendingFile;
+    if ((!text && !file) || !activeSchool || sending) return;
+
+    // Clear the input right away — don't make the user wait for the network
+    // round trip before they can see/type their next message.
+    setContent('');
+    clearPendingFile();
+    inputRef.current?.focus();
+
     setSending(true);
     try {
       const form = new FormData();
       form.append('schoolId', activeSchool._id);
-      if (content.trim()) form.append('content', content.trim());
-      if (pendingFile) form.append('file', pendingFile);
+      if (text) form.append('content', text);
+      if (file) form.append('file', file);
 
+      // Bounded timeout so a stalled connection can't leave the send button
+      // stuck on "sending" forever.
       await API.post('/messages/send', form, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 20000,
       });
-      setContent('');
-      clearPendingFile();
-      inputRef.current?.focus();
     } catch (e) {
       setFileError(e.response?.data?.message || 'Failed to send message');
     } finally {

@@ -4,6 +4,10 @@ const API = axios.create({
   baseURL:         import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
   withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
+  // No default timeout here — some requests on this instance (bulk import,
+  // AI analytics queries) can legitimately take a while. Callers that need a
+  // bound on a stalled connection (e.g. a "sending..." button that must not
+  // get stuck forever) should pass their own `timeout` per-request.
 });
 
 // Attach access token to every request
