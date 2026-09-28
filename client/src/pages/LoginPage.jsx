@@ -10,7 +10,7 @@ import ForgotPasswordModal from '../components/auth/ForgotPasswordModal';
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 const LoginPage = ({ roleConfig }) => {
-  const { login, loginWithGoogle, registerSchool } = useAuth();
+  const { login, loginWithGoogle, registerSchool, logout } = useAuth();
   const navigate  = useNavigate();
   const location  = useLocation();
 
@@ -69,8 +69,15 @@ const LoginPage = ({ roleConfig }) => {
 
     if (!result.success) { setError(result.message); return; }
 
-    // Enforce role — can't use superadmin login for school_user account
+    // Enforce role — can't use superadmin login for school_user account.
+    // login() above already authenticated and stored the session for
+    // whatever role this account actually is — if it doesn't match this
+    // page's role, that session must be torn back down, not just hidden
+    // behind an error message, otherwise the user stays silently logged in
+    // as the wrong role (e.g. navigating back to "/" would auto-redirect
+    // straight into that account's dashboard).
     if (result.user.role !== roleConfig.role && roleConfig.role !== 'any') {
+      await logout();
       setError(`This login is for ${roleConfig.label} accounts only.`);
       return;
     }
