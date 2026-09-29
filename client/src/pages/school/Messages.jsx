@@ -335,7 +335,7 @@ const Messages = () => {
                   value={content}
                   onChange={handleTyping}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(e); } }}
-                  placeholder="Type a message... (Enter to send, Shift+Enter for new line)"
+                  placeholder="Type a message..."
                   rows={1}
                   style={{ flex: 1, padding: '0.625rem 0.875rem', border: '1.5px solid #e2e8f0', borderRadius: '20px', fontSize: '0.875rem', fontFamily: 'inherit', outline: 'none', resize: 'none', lineHeight: 1.5, maxHeight: '100px', overflowY: 'auto' }}
                 />
